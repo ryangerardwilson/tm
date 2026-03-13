@@ -16,6 +16,7 @@
 
 ## Interface Rules
 - Keep the default flow fast and shell-native.
+- Bare `tm` is the deliberate no-arg exception to the workspace default help behavior and must open the curses session browser.
 - `tm k` should stay dense, grayscale, and keyboard-first.
 - Favor `j`/`k`, arrow keys, `m`, `v`, `x`, `?`, and `q`.
 - Error text should stay short and explicit.

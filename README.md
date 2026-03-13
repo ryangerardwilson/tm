@@ -18,8 +18,8 @@ That writes a shim to `~/.tm/bin/tm`. If `~/.tm/bin` is on your `PATH`, you can 
 ## Usage
 
 ```bash
+tm
 tm -h
-tm nav
 tm s root
 tm -v
 tm -u
@@ -28,7 +28,7 @@ tm -u
 ### Browser
 
 ```bash
-tm nav
+tm
 ```
 
 Core actions:

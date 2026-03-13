@@ -27,8 +27,8 @@ flags:
 
 features:
   open the tmux session browser
-  # tm nav
-  tm nav
+  # tm
+  tm
 
   attach to a named session, or create it first if needed
   # tm s <session_name>
@@ -70,18 +70,16 @@ def upgrade_app() -> int:
 def parse_args(argv: Sequence[str]) -> tuple[str, str | None]:
     args = list(argv)
     if not args:
-        return "help", None
+        return "browse", None
     if args == ["-h"]:
         return "help", None
     if args == ["-v"]:
         return "version", None
     if args == ["-u"]:
         return "upgrade", None
-    if args == ["nav"]:
-        return "browse", None
     if len(args) == 2 and args[0] == "s" and not args[1].startswith("-"):
         return "session", args[1]
-    raise UsageError("Usage: tm nav | tm s <session_name> | tm -h | tm -v | tm -u")
+    raise UsageError("Usage: tm | tm s <session_name> | tm -h | tm -v | tm -u")
 
 
 def main(argv: Sequence[str] | None = None, api: TmuxAPI | None = None) -> int:
