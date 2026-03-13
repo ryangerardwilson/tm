@@ -45,13 +45,9 @@ def test_help_is_hidden_until_toggled() -> None:
     assert state.show_help is True
 
 
-def test_leader_sequence_opens_new_session_prompt() -> None:
+def test_n_opens_new_session_prompt() -> None:
     state = build_state()
-    _handle_normal_key(state, ord(","))
-    assert state.leader_sequence == ","
-    _handle_normal_key(state, ord("n"))
-    assert state.leader_sequence == ",n"
-    action, value = _handle_normal_key(state, ord("s"))
+    action, value = _handle_normal_key(state, ord("n"))
     assert action == "prompt"
     assert value == "New session: "
 

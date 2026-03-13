@@ -10,7 +10,7 @@
 - Keep one primary flow: `tm` opens a curses session browser.
 - From inside the browser:
   - `l` switches or attaches to the selected session
-  - `,ns` creates a new named session
+  - `n` creates a new named session
   - `x` kills the current, marked, or visual selection
 - Do not grow this into a broad session manager unless explicitly asked.
 

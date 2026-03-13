@@ -35,8 +35,8 @@ features:
   tm s root
 
   inside the browser, create a new named session
-  # ,ns
-  ,ns
+  # n
+  n
 """
 
 

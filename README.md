@@ -38,7 +38,7 @@ Core actions:
 - `m`: mark or unmark the current session
 - `v`: toggle visual selection for a contiguous range
 - `x`: kill the current session, marked sessions, or the visual selection
-- `,ns`: create a new named session
+- `n`: create a new named session
 - `?`: toggle help
 - `q`: quit the picker
 

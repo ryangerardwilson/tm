@@ -19,7 +19,7 @@ HELP_LINES = [
     "  toggle visual mode for a contiguous selection",
     "x",
     "  kill the current session, marked sessions, or visual selection",
-    ",ns",
+    "n",
     "  create a new named session",
     "?",
     "  toggle this help",
@@ -37,7 +37,6 @@ class SessionBrowserState:
     visual_anchor: int | None = None
     show_help: bool = False
     help_scroll: int = 0
-    leader_sequence: str = ""
     status_message: str = ""
     prompt_active: bool = False
     prompt_buffer: str = ""
@@ -97,7 +96,6 @@ class SessionBrowserState:
         self.prompt_active = True
         self.prompt_label = label
         self.prompt_buffer = ""
-        self.leader_sequence = ""
         self.status_message = ""
 
     def end_prompt(self, message: str = "") -> None:
@@ -131,8 +129,6 @@ class SessionBrowserState:
             parts.append(f"{len(self.marked)} marked")
         if self.visual_mode:
             parts.append(f"{len(self.visual_indexes())} visual")
-        if self.leader_sequence:
-            parts.append(self.leader_sequence)
         if self.status_message:
             parts.append(self.status_message)
         return "  ".join(parts)
@@ -306,20 +302,6 @@ def _handle_help_key(state: SessionBrowserState, key: int, max_y: int) -> None:
 
 
 def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None, str | None]:
-    if state.leader_sequence:
-        if key == 27:
-            state.leader_sequence = ""
-            return None, None
-        if 32 <= key <= 126:
-            state.leader_sequence += chr(key)
-            if state.leader_sequence == ",ns":
-                return "prompt", "New session: "
-            if ",ns".startswith(state.leader_sequence):
-                return None, None
-        state.leader_sequence = ""
-        state.status_message = "Unknown command"
-        return None, None
-
     if key == ord("?"):
         state.show_help = True
         state.help_scroll = 0
@@ -342,8 +324,10 @@ def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None
         return None, None
     if key == ord("x"):
         return "kill", None
-    if key == ord(","):
-        state.leader_sequence = ","
+    if key == ord("n"):
+        return "prompt", "New session: "
+    if 32 <= key <= 126:
+        state.status_message = "Unknown command"
         return None, None
     return None, None
 
