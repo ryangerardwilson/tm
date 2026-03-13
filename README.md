@@ -6,14 +6,21 @@ This replaces shell-function glue and custom tmux chooser bindings with a real t
 
 ## Install
 
-For now `tm` installs from the local checkout:
+Install the latest tagged release with:
 
 ```bash
-cd ~/Apps/tm
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/tm/main/install.sh | bash
 ```
 
-That writes a shim to `~/.tm/bin/tm`. If `~/.tm/bin` is on your `PATH`, you can run `tm` from any shell.
+That installs `tm` into `~/.tm/bin/tm` and the release bundle into `~/.tm/app`.
+If `~/.tm/bin` is on your `PATH`, you can run `tm` from any shell.
+
+Installer shortcuts:
+
+- `./install.sh -h`: installer help
+- `./install.sh -v`: print the latest release version
+- `./install.sh -v 0.1.0`: install a specific release
+- `./install.sh -u`: upgrade to the latest release if newer
 
 ## Usage
 
@@ -24,6 +31,10 @@ tm s root
 tm -v
 tm -u
 ```
+
+`tm -v` prints the installed runtime version. Source checkouts keep `_version.py`
+at `0.0.0`; tagged release artifacts stamp the real release version during the
+release workflow.
 
 ### Browser
 

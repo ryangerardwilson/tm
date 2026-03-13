@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version env
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build release bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist/tm
+          cp main.py session_tui.py tmux_api.py _version.py README.md dist/tm/
+          printf '__version__ = "%s"\n' "${VERSION}" > dist/tm/_version.py
+          tar -C dist -czf tm-linux-x64.tar.gz tm
+
+      - name: Create release and upload asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            tm-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

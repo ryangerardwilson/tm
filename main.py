@@ -23,7 +23,7 @@ flags:
   tm -v
     print the installed version
   tm -u
-    reinstall from the current tm checkout
+    upgrade to the latest release
 
 features:
   open the tmux session browser

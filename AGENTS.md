@@ -27,6 +27,7 @@
 - Preserve safe kill semantics by moving attached clients to another session before killing the target.
 - If killing the final non-fallback session requires a temporary session, create it explicitly rather than guessing around tmux internals.
 
-## Installer Deviation
-- Until `tm` has a published release workflow, `install.sh` is intentionally source-checkout-first and installs a shim that points at this checkout.
-- Keep that behavior explicit in help and README; do not pretend a GitHub release path exists until it actually does.
+## Release Contract
+- Keep `tm` aligned with the workspace release contract.
+- `install.sh` installs tagged release bundles into `~/.tm/app` and exposes `~/.tm/bin/tm`.
+- Tagged builds stamp `_version.py` in the release artifact; the checked-in file stays at `0.0.0`.
