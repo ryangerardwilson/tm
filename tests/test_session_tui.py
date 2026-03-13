@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from session_tui import SessionBrowserState, _handle_normal_key, _handle_prompt_key
+import curses
+
+from session_tui import (
+    SessionBrowserState,
+    _format_session_row,
+    _handle_normal_key,
+    _handle_prompt_key,
+)
 from tmux_api import Session
 
 
@@ -59,3 +66,29 @@ def test_prompt_collects_name_and_submits() -> None:
     action, value = _handle_prompt_key(state, 10)
     assert action == "create"
     assert value == "work"
+
+
+def test_current_row_uses_bold_not_reverse() -> None:
+    line, attrs = _format_session_row(
+        "work",
+        is_current=True,
+        is_marked=False,
+        is_visual=False,
+        attached=False,
+    )
+    assert line == ">   work"
+    assert attrs & curses.A_BOLD
+    assert not attrs & curses.A_REVERSE
+
+
+def test_visual_row_uses_reverse_video() -> None:
+    line, attrs = _format_session_row(
+        "work",
+        is_current=False,
+        is_marked=True,
+        is_visual=True,
+        attached=True,
+    )
+    assert line == " *+ work (attached)"
+    assert attrs & curses.A_REVERSE
+    assert not attrs & curses.A_BOLD

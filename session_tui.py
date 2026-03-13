@@ -187,16 +187,13 @@ def _draw_sessions(stdscr: curses.window, state: SessionBrowserState) -> None:
         is_current = session_index == state.index
         is_marked = session.name in state.marked
         is_visual = session_index in visual_indexes
-        cursor = ">" if is_current else " "
-        mark = "*" if is_marked else " "
-        visual = "+" if is_visual else " "
-        attached_suffix = " (attached)" if session.attached else ""
-        line = f"{cursor}{mark}{visual} {session.name}{attached_suffix}"
-        attrs = curses.A_NORMAL
-        if is_visual:
-            attrs |= curses.A_BOLD
-        if is_current:
-            attrs |= curses.A_REVERSE
+        line, attrs = _format_session_row(
+            session.name,
+            is_current=is_current,
+            is_marked=is_marked,
+            is_visual=is_visual,
+            attached=bool(session.attached),
+        )
         stdscr.addnstr(row, 0, line, width - 1, attrs)
 
     if state.prompt_active:
@@ -205,6 +202,26 @@ def _draw_sessions(stdscr: curses.window, state: SessionBrowserState) -> None:
     else:
         stdscr.addnstr(height - 1, 0, state.status_line(), width - 1)
     stdscr.refresh()
+
+
+def _format_session_row(
+    session_name: str,
+    *,
+    is_current: bool,
+    is_marked: bool,
+    is_visual: bool,
+    attached: bool,
+) -> tuple[str, int]:
+    cursor = ">" if is_current else " "
+    mark = "*" if is_marked else " "
+    visual = "+" if is_visual else " "
+    attached_suffix = " (attached)" if attached else ""
+    line = f"{cursor}{mark}{visual} {session_name}{attached_suffix}"
+
+    attrs = curses.A_BOLD if is_current else curses.A_NORMAL
+    if is_visual:
+        attrs |= curses.A_REVERSE
+    return line, attrs
 
 
 def _refresh_sessions(
