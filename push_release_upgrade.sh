@@ -4,14 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-APP="tm"
+APP=""
 REMOTE="origin"
 POLL_ATTEMPTS=60
 POLL_INTERVAL_SECONDS=5
 
 usage() {
   cat <<'EOF'
-Push the current tm commit, create the next release tag, wait for the GitHub
+Push the current app commit, create the next release tag, wait for the GitHub
 release to publish, then upgrade the installed app.
 
 Usage:
@@ -81,7 +81,7 @@ wait_for_release() {
 
 verify_installed_version() {
   local version="$1"
-  local app_cmd="$HOME/.tm/bin/tm"
+  local app_cmd="$HOME/.${APP}/bin/${APP}"
   local installed=""
   if [[ -x "$app_cmd" ]]; then
     installed="$("$app_cmd" -v 2>/dev/null || true)"
@@ -104,6 +104,8 @@ main() {
   require_command git
   require_command bash
   require_command python3
+
+  APP="$(basename "$ROOT_DIR")"
 
   [[ -f "install.sh" ]] || die "install.sh not found in $ROOT_DIR"
   [[ -f ".github/workflows/release.yml" ]] || die "release workflow not found"

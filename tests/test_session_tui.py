@@ -67,6 +67,13 @@ def test_n_opens_new_session_prompt() -> None:
     assert value == "New session: "
 
 
+def test_r_requests_refresh() -> None:
+    state = build_state()
+    action, value = _handle_normal_key(state, ord("r"))
+    assert action == "refresh"
+    assert value is None
+
+
 def test_index_session_is_hidden_from_browser_rows() -> None:
     sessions = [
         Session("index", attached=0, windows=1),
