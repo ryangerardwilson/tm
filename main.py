@@ -9,7 +9,7 @@ from typing import Sequence
 
 from _version import __version__
 from session_tui import browse_sessions
-from tmux_api import TmuxAPI, TmuxError, attach_or_create_session
+from tmux_api import TmuxAPI, TmuxError, attach_or_create_session, ensure_index_session
 
 ANSI_GRAY = "\033[38;5;245m"
 ANSI_RESET = "\033[0m"
@@ -29,6 +29,10 @@ features:
   open the tmux session browser
   # tm
   tm
+
+  open the tmux session browser in persistent mode inside tmux
+  # tm p
+  tm p
 
   attach to a named session, or create it first if needed
   # tm s <session_name>
@@ -77,9 +81,11 @@ def parse_args(argv: Sequence[str]) -> tuple[str, str | None]:
         return "version", None
     if args == ["-u"]:
         return "upgrade", None
+    if args == ["p"]:
+        return "persistent", None
     if len(args) == 2 and args[0] == "s" and not args[1].startswith("-"):
         return "session", args[1]
-    raise UsageError("Usage: tm | tm s <session_name> | tm -h | tm -v | tm -u")
+    raise UsageError("Usage: tm | tm p | tm s <session_name> | tm -h | tm -v | tm -u")
 
 
 def main(argv: Sequence[str] | None = None, api: TmuxAPI | None = None) -> int:
@@ -95,8 +101,11 @@ def main(argv: Sequence[str] | None = None, api: TmuxAPI | None = None) -> int:
             return 0
         if command == "upgrade":
             return upgrade_app()
+        if command == "persistent":
+            return browse_sessions(api, persistent=True)
         if command == "session":
             assert value is not None
+            ensure_index_session(api)
             return attach_or_create_session(api, value)
         return browse_sessions(api)
     except UsageError as exc:

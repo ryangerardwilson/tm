@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from tmux_api import TmuxAPI, attach_or_create_session, kill_session_safely, kill_sessions_safely
+import tmux_api
+from tmux_api import (
+    INDEX_WINDOW_NAME,
+    TmuxAPI,
+    attach_or_create_session,
+    ensure_index_session,
+    index_browser_command,
+    kill_session_safely,
+    kill_sessions_safely,
+)
 
 
 class FakeProc:
@@ -43,16 +52,122 @@ def test_attach_or_create_inside_tmux_creates_and_switches() -> None:
     api = FakeAPI(
         {
             ("has-session", "-t", "work"): FakeProc(returncode=1),
-            ("new-session", "-d", "-s", "work"): FakeProc(returncode=0),
+            ("new-session", "-d", "-c", "/tmp/home", "-s", "work"): FakeProc(returncode=0),
             ("switch-client", "-t", "work"): FakeProc(returncode=0),
         },
-        env={"TMUX": "/tmp/socket,1,0"},
+        env={"TMUX": "/tmp/socket,1,0", "HOME": "/tmp/home"},
     )
     assert attach_or_create_session(api, "work") == 0
     assert api.calls == [
         ("has-session", "-t", "work"),
-        ("new-session", "-d", "-s", "work"),
+        ("new-session", "-d", "-c", "/tmp/home", "-s", "work"),
         ("switch-client", "-t", "work"),
+    ]
+
+
+def test_attach_or_create_outside_tmux_creates_in_home_directory() -> None:
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "work"): FakeProc(returncode=1),
+            ("new-session", "-c", "/tmp/home", "-s", "work"): FakeProc(returncode=0),
+        },
+        env={"HOME": "/tmp/home"},
+    )
+    assert attach_or_create_session(api, "work") == 0
+    assert api.calls == [
+        ("has-session", "-t", "work"),
+        ("new-session", "-c", "/tmp/home", "-s", "work"),
+    ]
+
+
+def test_ensure_index_session_creates_missing_index() -> None:
+    browser_command = index_browser_command()
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "index"): FakeProc(returncode=1),
+            (
+                "new-session",
+                "-d",
+                "-c",
+                "/tmp/home",
+                "-s",
+                "index",
+                "-n",
+                INDEX_WINDOW_NAME,
+                browser_command,
+            ): FakeProc(returncode=0),
+        },
+        env={"HOME": "/tmp/home"},
+    )
+    created = ensure_index_session(api)
+    assert created is True
+    assert api.calls == [
+        ("has-session", "-t", "index"),
+        (
+            "new-session",
+            "-d",
+            "-c",
+            "/tmp/home",
+            "-s",
+            "index",
+            "-n",
+            INDEX_WINDOW_NAME,
+            browser_command,
+        ),
+    ]
+
+
+def test_ensure_index_session_skips_existing_index() -> None:
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "index"): FakeProc(returncode=0),
+            ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=0, stdout="@1"),
+        }
+    )
+    created = ensure_index_session(api)
+    assert created is False
+    assert api.calls == [
+        ("has-session", "-t", "index"),
+        ("display-message", "-p", "-t", "index:index", "#{window_id}"),
+    ]
+
+
+def test_ensure_index_session_creates_missing_browser_window() -> None:
+    browser_command = index_browser_command()
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "index"): FakeProc(returncode=0),
+            ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=1),
+            (
+                "new-window",
+                "-d",
+                "-t",
+                "index",
+                "-n",
+                INDEX_WINDOW_NAME,
+                "-c",
+                "/tmp/home",
+                browser_command,
+            ): FakeProc(returncode=0),
+        },
+        env={"HOME": "/tmp/home"},
+    )
+    created = ensure_index_session(api)
+    assert created is True
+    assert api.calls == [
+        ("has-session", "-t", "index"),
+        ("display-message", "-p", "-t", "index:index", "#{window_id}"),
+        (
+            "new-window",
+            "-d",
+            "-t",
+            "index",
+            "-n",
+            INDEX_WINDOW_NAME,
+            "-c",
+            "/tmp/home",
+            browser_command,
+        ),
     ]
 
 
@@ -109,4 +224,34 @@ def test_kill_sessions_safely_uses_non_target_fallback_for_multiple_targets() ->
         ("switch-client", "-c", "/dev/pts/2", "-t", "keep"),
         ("kill-session", "-t", "work"),
         ("kill-session", "-t", "notes"),
+    ]
+
+
+def test_kill_session_safely_creates_temp_fallback_in_home_directory(monkeypatch) -> None:
+    monkeypatch.setattr(tmux_api.time, "time", lambda: 123)
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "work"): FakeProc(returncode=0),
+            ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"): FakeProc(
+                stdout="work\t1\t2\n"
+            ),
+            ("new-session", "-d", "-c", "/tmp/home", "-s", "__tmp_123"): FakeProc(returncode=0),
+            ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
+            ("switch-client", "-c", "/dev/pts/1", "-t", "__tmp_123"): FakeProc(returncode=0),
+            ("kill-session", "-t", "work"): FakeProc(returncode=0),
+        },
+        env={"HOME": "/tmp/home"},
+    )
+    fallback = kill_session_safely(api, "work")
+    assert fallback == "__tmp_123"
+    assert api.calls[:4] == [
+        ("has-session", "-t", "work"),
+        ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"),
+        ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"),
+        ("new-session", "-d", "-c", "/tmp/home", "-s", "__tmp_123"),
+    ]
+    assert api.calls[4:] == [
+        ("list-clients", "-t", "work", "-F", "#{client_tty}"),
+        ("switch-client", "-c", "/dev/pts/1", "-t", "__tmp_123"),
+        ("kill-session", "-t", "work"),
     ]

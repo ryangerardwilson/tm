@@ -4,10 +4,15 @@ import os
 import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 
 class TmuxError(RuntimeError):
     """Raised when a tmux command fails."""
+
+
+INDEX_SESSION_NAME = "index"
+INDEX_WINDOW_NAME = "index"
 
 
 @dataclass(frozen=True)
@@ -20,6 +25,9 @@ class Session:
 class TmuxAPI:
     def __init__(self, env: dict[str, str] | None = None) -> None:
         self.env = os.environ.copy() if env is None else dict(env)
+
+    def default_start_directory(self) -> str:
+        return self.env.get("HOME") or str(Path.home())
 
     def _run(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
         proc = subprocess.run(
@@ -53,6 +61,15 @@ class TmuxAPI:
             return []
         return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
+    def has_window(self, session_name: str, window_name: str) -> bool:
+        return (
+            self._run(
+                ["display-message", "-p", "-t", f"{session_name}:{window_name}", "#{window_id}"],
+                check=False,
+            ).returncode
+            == 0
+        )
+
     def switch_client(self, target_session: str, client_tty: str | None = None) -> None:
         args = ["switch-client"]
         if client_tty:
@@ -63,11 +80,35 @@ class TmuxAPI:
     def attach_session(self, session_name: str) -> int:
         return self._run(["attach-session", "-t", session_name], check=False).returncode
 
-    def new_session(self, session_name: str, detached: bool = False) -> int:
+    def new_session(
+        self,
+        session_name: str,
+        detached: bool = False,
+        start_directory: str | None = None,
+        window_name: str | None = None,
+        command: str | None = None,
+    ) -> int:
         args = ["new-session"]
         if detached:
             args.append("-d")
-        args.extend(["-s", session_name])
+        args.extend(["-c", start_directory or self.default_start_directory(), "-s", session_name])
+        if window_name:
+            args.extend(["-n", window_name])
+        if command:
+            args.append(command)
+        return self._run(args, check=False).returncode
+
+    def new_window(
+        self,
+        session_name: str,
+        window_name: str,
+        start_directory: str | None = None,
+        command: str | None = None,
+    ) -> int:
+        args = ["new-window", "-d", "-t", session_name, "-n", window_name]
+        args.extend(["-c", start_directory or self.default_start_directory()])
+        if command:
+            args.append(command)
         return self._run(args, check=False).returncode
 
     def kill_session(self, session_name: str) -> None:
@@ -78,8 +119,46 @@ class TmuxAPI:
             if session.name != target_session:
                 return session.name, False
         fallback = f"__tmp_{int(time.time())}"
-        self._run(["new-session", "-d", "-s", fallback])
+        self._run(["new-session", "-d", "-c", self.default_start_directory(), "-s", fallback])
         return fallback, True
+
+
+def ensure_session_exists(api: TmuxAPI, session_name: str, detached: bool = True) -> bool:
+    if api.has_session(session_name):
+        return False
+    rc = api.new_session(session_name, detached=detached)
+    if rc != 0:
+        raise TmuxError(f"Unable to create session: {session_name}")
+    return True
+
+
+def index_browser_command() -> str:
+    entrypoint = Path(__file__).resolve().with_name("main.py")
+    return f"/usr/bin/env python3 {entrypoint} p"
+
+
+def ensure_index_session(api: TmuxAPI) -> bool:
+    browser_command = index_browser_command()
+    if not api.has_session(INDEX_SESSION_NAME):
+        rc = api.new_session(
+            INDEX_SESSION_NAME,
+            detached=True,
+            window_name=INDEX_WINDOW_NAME,
+            command=browser_command,
+        )
+        if rc != 0:
+            raise TmuxError(f"Unable to create session: {INDEX_SESSION_NAME}")
+        return True
+    if api.has_window(INDEX_SESSION_NAME, INDEX_WINDOW_NAME):
+        return False
+    rc = api.new_window(
+        INDEX_SESSION_NAME,
+        INDEX_WINDOW_NAME,
+        command=browser_command,
+    )
+    if rc != 0:
+        raise TmuxError(f"Unable to create session: {INDEX_SESSION_NAME}")
+    return True
 
 
 def attach_or_create_session(api: TmuxAPI, session_name: str) -> int:

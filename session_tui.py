@@ -3,7 +3,7 @@ from __future__ import annotations
 import curses
 from dataclasses import dataclass, field
 
-from tmux_api import Session, TmuxAPI, TmuxError, kill_sessions_safely
+from tmux_api import INDEX_SESSION_NAME, Session, TmuxAPI, TmuxError, ensure_index_session, kill_sessions_safely
 
 
 HELP_LINES = [
@@ -50,7 +50,7 @@ class SessionBrowserState:
     def move(self, delta: int) -> None:
         if not self.sessions:
             return
-        self.index = max(0, min(self.index + delta, len(self.sessions) - 1))
+        self.index = (self.index + delta) % len(self.sessions)
 
     def visual_indexes(self) -> set[int]:
         if not self.visual_mode or self.visual_anchor is None:
@@ -223,7 +223,12 @@ def _format_session_row(
 def _refresh_sessions(
     api: TmuxAPI, state: SessionBrowserState, preferred: str | None = None
 ) -> None:
-    state.sync_sessions(api.list_sessions(), preferred=preferred)
+    ensure_index_session(api)
+    state.sync_sessions(_visible_sessions(api.list_sessions()), preferred=preferred)
+
+
+def _visible_sessions(sessions: list[Session]) -> list[Session]:
+    return [session for session in sessions if session.name != INDEX_SESSION_NAME]
 
 
 def _create_session(api: TmuxAPI, state: SessionBrowserState, session_name: str) -> None:
@@ -240,13 +245,16 @@ def _create_session(api: TmuxAPI, state: SessionBrowserState, session_name: str)
     state.end_prompt(f"Created {session_name}")
 
 
-def _enter_session(api: TmuxAPI, state: SessionBrowserState) -> int:
+def _enter_session(api: TmuxAPI, state: SessionBrowserState, persistent: bool = False) -> int | None:
     current = state.current_name()
     if current is None:
         state.status_message = "No session selected"
         return 0
     if api.env.get("TMUX"):
         api.switch_client(current)
+        if persistent:
+            state.status_message = f"Switched to {current}"
+            return None
         return 0
     return api.attach_session(current)
 
@@ -332,8 +340,9 @@ def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None
     return None, None
 
 
-def browse_sessions(api: TmuxAPI) -> int:
-    state = SessionBrowserState(sessions=api.list_sessions())
+def browse_sessions(api: TmuxAPI, persistent: bool = False) -> int:
+    ensure_index_session(api)
+    state = SessionBrowserState(sessions=_visible_sessions(api.list_sessions()))
 
     def _run(stdscr: curses.window) -> int:
         _setup_curses(stdscr)
@@ -359,7 +368,10 @@ def browse_sessions(api: TmuxAPI) -> int:
                 state.begin_prompt(value)
                 continue
             if action == "enter":
-                return _enter_session(api, state)
+                rc = _enter_session(api, state, persistent=persistent)
+                if rc is not None:
+                    return rc
+                continue
             if action == "kill":
                 _kill_selected(api, state)
 

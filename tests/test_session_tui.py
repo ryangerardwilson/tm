@@ -4,9 +4,11 @@ import curses
 
 from session_tui import (
     SessionBrowserState,
+    _enter_session,
     _format_session_row,
     _handle_normal_key,
     _handle_prompt_key,
+    _visible_sessions,
 )
 from tmux_api import Session
 
@@ -45,11 +47,33 @@ def test_help_is_hidden_until_toggled() -> None:
     assert state.show_help is True
 
 
+def test_j_wraps_from_last_to_first() -> None:
+    state = build_state()
+    state.index = len(state.sessions) - 1
+    _handle_normal_key(state, ord("j"))
+    assert state.index == 0
+
+
+def test_k_wraps_from_first_to_last() -> None:
+    state = build_state()
+    _handle_normal_key(state, ord("k"))
+    assert state.index == len(state.sessions) - 1
+
+
 def test_n_opens_new_session_prompt() -> None:
     state = build_state()
     action, value = _handle_normal_key(state, ord("n"))
     assert action == "prompt"
     assert value == "New session: "
+
+
+def test_index_session_is_hidden_from_browser_rows() -> None:
+    sessions = [
+        Session("index", attached=0, windows=1),
+        Session("work", attached=1, windows=2),
+        Session("notes", attached=0, windows=3),
+    ]
+    assert [session.name for session in _visible_sessions(sessions)] == ["work", "notes"]
 
 
 def test_prompt_collects_name_and_submits() -> None:
@@ -62,6 +86,43 @@ def test_prompt_collects_name_and_submits() -> None:
     action, value = _handle_prompt_key(state, 10)
     assert action == "create"
     assert value == "work"
+
+
+def test_enter_from_index_session_switches_without_exiting() -> None:
+    state = build_state()
+
+    class FakeAPI:
+        env = {"TMUX": "/tmp/socket,1,0"}
+
+        def __init__(self) -> None:
+            self.switched: list[str] = []
+
+        def switch_client(self, target_session: str) -> None:
+            self.switched.append(target_session)
+
+    api = FakeAPI()
+    rc = _enter_session(api, state, persistent=True)
+    assert rc is None
+    assert api.switched == ["a"]
+    assert state.status_message == "Switched to a"
+
+
+def test_enter_from_non_index_tmux_session_exits_browser() -> None:
+    state = build_state()
+
+    class FakeAPI:
+        env = {"TMUX": "/tmp/socket,1,0"}
+
+        def __init__(self) -> None:
+            self.switched: list[str] = []
+
+        def switch_client(self, target_session: str) -> None:
+            self.switched.append(target_session)
+
+    api = FakeAPI()
+    rc = _enter_session(api, state)
+    assert rc == 0
+    assert api.switched == ["a"]
 
 
 def test_current_row_uses_bold_not_reverse() -> None:

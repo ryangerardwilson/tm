@@ -26,6 +26,7 @@ Installer shortcuts:
 
 ```bash
 tm
+tm p
 tm -h
 tm s root
 tm -v
@@ -42,6 +43,12 @@ release workflow.
 tm
 ```
 
+Persistent browser mode inside tmux:
+
+```bash
+tm p
+```
+
 Core actions:
 
 - `j` / `k` or arrow keys: move
@@ -54,6 +61,7 @@ Core actions:
 - `q`: quit the picker
 
 Outside tmux, `l` attaches to the selected session. Inside tmux, it switches the current client to that session.
+In `tm p`, the picker stays running in its original tmux pane after a switch, so you can jump back to it later.
 
 ### Direct Session
 
