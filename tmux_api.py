@@ -20,6 +20,7 @@ class Session:
     name: str
     attached: int
     windows: int
+    last_attached: int = 0
 
 
 class TmuxAPI:
@@ -47,13 +48,24 @@ class TmuxAPI:
 
     def list_sessions(self) -> list[Session]:
         proc = self._run(
-            ["list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"]
+            [
+                "list-sessions",
+                "-F",
+                "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_last_attached}",
+            ]
         )
         sessions: list[Session] = []
         for line in proc.stdout.splitlines():
-            name, attached, windows = (line.split("\t") + ["0", "0"])[:3]
-            sessions.append(Session(name=name, attached=int(attached), windows=int(windows)))
-        return sessions
+            name, attached, windows, last_attached = (line.split("\t") + ["0", "0", "0"])[:4]
+            sessions.append(
+                Session(
+                    name=name,
+                    attached=int(attached),
+                    windows=int(windows),
+                    last_attached=int(last_attached or 0),
+                )
+            )
+        return sorted(sessions, key=lambda session: session.last_attached, reverse=True)
 
     def list_client_ttys(self, session_name: str) -> list[str]:
         proc = self._run(["list-clients", "-t", session_name, "-F", "#{client_tty}"], check=False)

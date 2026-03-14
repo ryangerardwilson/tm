@@ -34,6 +34,9 @@ class FakeAPI(TmuxAPI):
         return proc
 
 
+LIST_SESSIONS_FORMAT = "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_last_attached}"
+
+
 def test_attach_or_create_outside_tmux_attaches_existing() -> None:
     api = FakeAPI(
         {
@@ -171,12 +174,24 @@ def test_ensure_index_session_creates_missing_browser_window() -> None:
     ]
 
 
+def test_list_sessions_orders_by_most_recent_attach() -> None:
+    api = FakeAPI(
+        {
+            ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
+                stdout="older\t0\t1\t100\nnewer\t1\t2\t300\nnever\t0\t1\t0\n"
+            )
+        }
+    )
+    sessions = api.list_sessions()
+    assert [session.name for session in sessions] == ["newer", "older", "never"]
+
+
 def test_kill_session_safely_moves_clients_then_kills() -> None:
     api = FakeAPI(
         {
             ("has-session", "-t", "work"): FakeProc(returncode=0),
-            ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"): FakeProc(
-                stdout="work\t1\t2\nnotes\t0\t1\n"
+            ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
+                stdout="work\t1\t2\t200\nnotes\t0\t1\t100\n"
             ),
             ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n/dev/pts/2\n"),
             ("switch-client", "-c", "/dev/pts/1", "-t", "notes"): FakeProc(returncode=0),
@@ -188,7 +203,7 @@ def test_kill_session_safely_moves_clients_then_kills() -> None:
     assert fallback == "notes"
     assert api.calls == [
         ("has-session", "-t", "work"),
-        ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"),
+        ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
         ("list-clients", "-t", "work", "-F", "#{client_tty}"),
         ("switch-client", "-c", "/dev/pts/1", "-t", "notes"),
         ("switch-client", "-c", "/dev/pts/2", "-t", "notes"),
@@ -201,8 +216,8 @@ def test_kill_sessions_safely_uses_non_target_fallback_for_multiple_targets() ->
         {
             ("has-session", "-t", "work"): FakeProc(returncode=0),
             ("has-session", "-t", "notes"): FakeProc(returncode=0),
-            ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"): FakeProc(
-                stdout="work\t1\t2\nnotes\t1\t1\nkeep\t0\t4\n"
+            ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
+                stdout="work\t1\t2\t300\nnotes\t1\t1\t200\nkeep\t0\t4\t100\n"
             ),
             ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
             ("list-clients", "-t", "notes", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/2\n"),
@@ -217,7 +232,7 @@ def test_kill_sessions_safely_uses_non_target_fallback_for_multiple_targets() ->
     assert api.calls == [
         ("has-session", "-t", "work"),
         ("has-session", "-t", "notes"),
-        ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"),
+        ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
         ("list-clients", "-t", "work", "-F", "#{client_tty}"),
         ("switch-client", "-c", "/dev/pts/1", "-t", "keep"),
         ("list-clients", "-t", "notes", "-F", "#{client_tty}"),
@@ -232,8 +247,8 @@ def test_kill_session_safely_creates_temp_fallback_in_home_directory(monkeypatch
     api = FakeAPI(
         {
             ("has-session", "-t", "work"): FakeProc(returncode=0),
-            ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"): FakeProc(
-                stdout="work\t1\t2\n"
+            ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
+                stdout="work\t1\t2\t200\n"
             ),
             ("new-session", "-d", "-c", "/tmp/home", "-s", "__tmp_123"): FakeProc(returncode=0),
             ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
@@ -246,8 +261,8 @@ def test_kill_session_safely_creates_temp_fallback_in_home_directory(monkeypatch
     assert fallback == "__tmp_123"
     assert api.calls[:4] == [
         ("has-session", "-t", "work"),
-        ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"),
-        ("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"),
+        ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
+        ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
         ("new-session", "-d", "-c", "/tmp/home", "-s", "__tmp_123"),
     ]
     assert api.calls[4:] == [
