@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/tm
-          cp main.py session_tui.py tmux_api.py _version.py README.md install.sh dist/tm/
+          cp main.py session_tui.py tmux_api.py _version.py README.md install.sh requirements.txt dist/tm/
           printf '__version__ = "%s"\n' "${VERSION}" > dist/tm/_version.py
           tar -C dist -czf tm-linux-x64.tar.gz tm
 

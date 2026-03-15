@@ -8,9 +8,6 @@ import main
 def test_parse_args_help_variants() -> None:
     assert main.parse_args([]) == ("browse", None)
     assert main.parse_args(["p"]) == ("persistent", None)
-    assert main.parse_args(["-h"]) == ("help", None)
-    assert main.parse_args(["-v"]) == ("version", None)
-    assert main.parse_args(["-u"]) == ("upgrade", None)
     assert main.parse_args(["s", "root"]) == ("session", "root")
 
 
@@ -18,7 +15,7 @@ def test_parse_args_rejects_unknown_shape() -> None:
     try:
         main.parse_args(["-x"])
     except main.UsageError as exc:
-        assert str(exc) == "Usage: tm | tm p | tm s <session_name> | tm -h | tm -v | tm -u"
+        assert str(exc) == "Usage: tm | tm p | tm s <session_name>"
     else:
         raise AssertionError("UsageError not raised")
 
@@ -27,7 +24,7 @@ def test_parse_args_rejects_removed_nav_command() -> None:
     try:
         main.parse_args(["nav"])
     except main.UsageError as exc:
-        assert str(exc) == "Usage: tm | tm p | tm s <session_name> | tm -h | tm -v | tm -u"
+        assert str(exc) == "Usage: tm | tm p | tm s <session_name>"
     else:
         raise AssertionError("UsageError not raised")
 
@@ -94,25 +91,18 @@ def test_main_persistent_mode_opens_browser_with_flag(monkeypatch) -> None:
     assert calls == [(api, True)]
 
 
-def test_upgrade_app_uses_installer(monkeypatch) -> None:
-    calls: list[list[str]] = []
+def test_main_delegates_upgrade_to_contract_runtime(monkeypatch) -> None:
+    recorded: dict[str, object] = {}
 
-    class Proc:
-        returncode = 0
+    def fake_run_app(spec, argv, dispatch):  # type: ignore[no-untyped-def]
+        recorded["spec"] = spec
+        recorded["argv"] = argv
+        recorded["dispatch"] = dispatch
+        return 0
 
-    def fake_run(args, check, text, env):  # type: ignore[no-untyped-def]
-        calls.append(args)
-        return Proc()
-
-    monkeypatch.setattr(main.subprocess, "run", fake_run)
-    rc = main.upgrade_app()
+    monkeypatch.setattr(main, "run_app", fake_run_app)
+    rc = main.main(["-u"])
     assert rc == 0
-    assert calls == [["/usr/bin/env", "bash", str(Path(main.__file__).resolve().parent / "install.sh"), "-u"]]
-
-
-def test_upgrade_app_reports_missing_installer(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(main, "INSTALL_SCRIPT", Path("/tmp/does-not-exist-install.sh"))
-    rc = main.upgrade_app()
-    captured = capsys.readouterr()
-    assert rc == 1
-    assert captured.err.strip() == "install.sh is missing: /tmp/does-not-exist-install.sh"
+    assert recorded["spec"] == main.APP_SPEC
+    assert recorded["argv"] == ["-u"]
+    assert callable(recorded["dispatch"])

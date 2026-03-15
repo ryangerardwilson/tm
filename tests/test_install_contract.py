@@ -32,4 +32,12 @@ def test_release_workflow_stamps_version_and_publishes_bundle() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert 'printf \'__version__ = "%s"\\n\'' in workflow
     assert "tm-linux-x64.tar.gz" in workflow
-    assert "cp main.py session_tui.py tmux_api.py _version.py README.md install.sh dist/tm/" in workflow
+    assert "cp main.py session_tui.py tmux_api.py _version.py README.md install.sh requirements.txt dist/tm/" in workflow
+
+
+def test_installer_creates_app_local_venv() -> None:
+    script = (ROOT / "install.sh").read_text()
+    assert 'VENV_DIR="$APP_HOME/venv"' in script
+    assert 'python3 -m venv "$VENV_DIR"' in script
+    assert '"$VENV_DIR/bin/pip" install --disable-pip-version-check -r "$APP_DIR/${APP}/requirements.txt"' in script
+    assert 'exec "${HOME}/.${APP}/venv/bin/python" "${HOME}/.${APP}/app/${APP}/main.py" "\\$@"' in script

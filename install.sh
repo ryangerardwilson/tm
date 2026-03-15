@@ -6,6 +6,7 @@ REPO="ryangerardwilson/tm"
 APP_HOME="$HOME/.${APP}"
 INSTALL_DIR="$APP_HOME/bin"
 APP_DIR="$APP_HOME/app"
+VENV_DIR="$APP_HOME/venv"
 FILENAME="${APP}-linux-x64.tar.gz"
 TMUX_SNIPPET_DIR="$HOME/.tmux"
 TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"
@@ -192,10 +193,16 @@ mkdir -p "$APP_DIR"
 mv "$tmp_dir/${APP}" "$APP_DIR"
 rm -rf "$tmp_dir"
 
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/pip" install --disable-pip-version-check -U pip
+if [[ -f "$APP_DIR/${APP}/requirements.txt" ]]; then
+  "$VENV_DIR/bin/pip" install --disable-pip-version-check -r "$APP_DIR/${APP}/requirements.txt"
+fi
+
 cat > "$INSTALL_DIR/$APP" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-exec python3 "${HOME}/.${APP}/app/${APP}/main.py" "\$@"
+exec "${HOME}/.${APP}/venv/bin/python" "${HOME}/.${APP}/app/${APP}/main.py" "\$@"
 EOF
 chmod 755 "$INSTALL_DIR/$APP"
 
