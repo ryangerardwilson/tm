@@ -55,6 +55,8 @@ Persistent browser mode inside tmux:
 tm p
 ```
 
+The persistent index browser writes an automatic restore snapshot once per hour in the background.
+
 Core actions:
 
 - `j` / `k` or arrow keys: move
@@ -69,6 +71,18 @@ Core actions:
 Outside tmux, `l` attaches to the selected session. Inside tmux, it switches the current client to that session.
 In `tm p`, the picker stays running in its original tmux pane after a switch and refreshes the session list, so ordering is updated when you jump back to it later.
 Sessions with actively working Codex panes show the same compact animated pulse used in `loc`.
+
+## Automatic Restore
+
+If a saved snapshot exists and there are no live non-index tmux sessions, `tm` restores the snapshot automatically on the next `tm` startup.
+
+Restore behavior:
+
+- recreates tmux sessions, windows, and pane splits from the latest snapshot
+- resumes Codex panes with `codex resume <thread_id>` when the running Codex thread ID was captured
+- reopens non-Codex panes as shells in the saved working directory
+
+This restores tmux layout and Codex conversations. It does not checkpoint arbitrary in-memory process state mid-flight.
 
 ### Direct Session
 

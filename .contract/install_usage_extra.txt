@@ -1,0 +1,1 @@
+      --tmux-key <key>       Bind the index-session shortcut in tmux (default: C-Insert)

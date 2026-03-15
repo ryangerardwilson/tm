@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import curses
+import time
 from dataclasses import dataclass, field, replace
 
+from snapshot_state import SNAPSHOT_INTERVAL_SECONDS, SnapshotError, write_runtime_snapshot
 from tmux_api import (
     INDEX_SESSION_NAME,
     AgentStatus,
@@ -329,6 +331,7 @@ def _create_session(api: TmuxAPI, state: SessionBrowserState, session_name: str)
     if rc != 0:
         raise TmuxError(f"Unable to create session: {session_name}")
     _refresh_sessions(api, state, preferred=session_name)
+    _save_snapshot_now(api, state)
     state.end_prompt(f"Created {session_name}")
 
 
@@ -358,6 +361,7 @@ def _kill_selected(api: TmuxAPI, state: SessionBrowserState) -> None:
     )
     kill_sessions_safely(api, targets)
     _refresh_sessions(api, state, preferred=preferred)
+    _save_snapshot_now(api, state)
     state.reset_visual()
     state.marked.clear()
     if len(targets) == 1:
@@ -428,14 +432,44 @@ def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None
     return None, None
 
 
+def _save_snapshot_now(api: TmuxAPI, state: SessionBrowserState) -> None:
+    try:
+        write_runtime_snapshot(api)
+    except (SnapshotError, TmuxError) as exc:
+        state.status_message = str(exc)
+
+
+def _maybe_write_hourly_snapshot(
+    api: TmuxAPI,
+    state: SessionBrowserState,
+    persistent: bool,
+    last_snapshot_at: float | None,
+    now: float | None = None,
+) -> float | None:
+    if not persistent:
+        return last_snapshot_at
+    current_time = time.monotonic() if now is None else now
+    if last_snapshot_at is not None and current_time - last_snapshot_at < SNAPSHOT_INTERVAL_SECONDS:
+        return last_snapshot_at
+    _save_snapshot_now(api, state)
+    return current_time
+
+
 def browse_sessions(api: TmuxAPI, persistent: bool = False) -> int:
     ensure_index_session(api)
     state = SessionBrowserState(sessions=[])
     _refresh_sessions(api, state)
 
     def _run(stdscr: curses.window) -> int:
+        last_snapshot_at: float | None = None
         _setup_curses(stdscr)
         while True:
+            last_snapshot_at = _maybe_write_hourly_snapshot(
+                api,
+                state,
+                persistent,
+                last_snapshot_at,
+            )
             if state.show_help:
                 _draw_help(stdscr, state)
                 _handle_help_key(state, stdscr.getch(), stdscr.getmaxyx()[0])

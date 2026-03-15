@@ -12,6 +12,7 @@ from tmux_api import (
     index_browser_command,
     kill_session_safely,
     kill_sessions_safely,
+    _rollout_thread_id_from_lsof_output,
 )
 
 
@@ -203,7 +204,11 @@ def test_list_session_agent_statuses_counts_working_and_idle_codex_panes() -> No
     api = AgentAPI(
         {
             ("list-panes", "-a", "-F", LIST_PANES_FORMAT): FakeProc(
-                stdout="work\t%1\t100\tnode\nwork\t%2\t200\tnode\nnotes\t%3\t300\tbash\n"
+                stdout=(
+                    "work\t0\t0\t%1\t100\tnode\t/tmp/work\t1\n"
+                    "work\t0\t1\t%2\t200\tnode\t/tmp/work\t0\n"
+                    "notes\t0\t0\t%3\t300\tbash\t/tmp/notes\t1\n"
+                )
             ),
             ("capture-pane", "-p", "-t", "%1", "-S", "-40"): FakeProc(
                 stdout="• Working (28s • esc to interrupt)\n"
@@ -215,6 +220,15 @@ def test_list_session_agent_statuses_counts_working_and_idle_codex_panes() -> No
     )
     statuses = api.list_session_agent_statuses()
     assert statuses == {"work": AgentStatus(total=2, working=1, idle=1)}
+
+
+def test_rollout_thread_id_parser_extracts_codex_thread_id() -> None:
+    output = (
+        "codex 2101 ryan 45w REG 0,55 340110 14346254 "
+        "/home/ryan/.codex/sessions/2026/03/15/"
+        "rollout-2026-03-15T11-55-31-019cf02b-d991-7221-a544-abaa9bbfa2f3.jsonl\n"
+    )
+    assert _rollout_thread_id_from_lsof_output(output) == "019cf02b-d991-7221-a544-abaa9bbfa2f3"
 
 
 def test_kill_session_safely_moves_clients_then_kills() -> None:

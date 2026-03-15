@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -14,7 +15,14 @@ class TmuxError(RuntimeError):
 INDEX_SESSION_NAME = "index"
 INDEX_WINDOW_NAME = "index"
 LIST_SESSIONS_FORMAT = "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_last_attached}"
-LIST_PANES_FORMAT = "#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_command}"
+LIST_WINDOWS_FORMAT = "#{window_index}\t#{window_name}\t#{window_active}\t#{window_layout}"
+LIST_PANES_FORMAT = (
+    "#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_id}\t#{pane_pid}\t"
+    "#{pane_current_command}\t#{pane_current_path}\t#{pane_active}"
+)
+ROLLOUT_PATH_RE = re.compile(
+    r"rollout-.*-(?P<thread_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$"
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +38,10 @@ class Pane:
     pane_id: str
     pane_pid: int
     current_command: str
+    window_index: int = 0
+    pane_index: int = 0
+    current_path: str = ""
+    active: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +63,14 @@ class Session:
     agent_idle: int = 0
 
 
+@dataclass(frozen=True)
+class Window:
+    index: int
+    name: str
+    active: bool
+    layout: str
+
+
 def _is_codex_process(process: ProcessInfo) -> bool:
     return (
         process.comm == "codex"
@@ -62,6 +82,19 @@ def _is_codex_process(process: ProcessInfo) -> bool:
 def _pane_text_shows_working(text: str) -> bool:
     recent_lines = [line.strip().lower() for line in text.splitlines() if line.strip()][-3:]
     return any("working (" in line or "esc to interrupt" in line for line in recent_lines)
+
+
+def _tmux_server_missing(text: str) -> bool:
+    lowered = text.lower()
+    return "no server running" in lowered or "failed to connect to server" in lowered
+
+
+def _rollout_thread_id_from_lsof_output(output: str) -> str | None:
+    for line in output.splitlines():
+        match = ROLLOUT_PATH_RE.search(line.strip())
+        if match:
+            return match.group("thread_id")
+    return None
 
 
 class TmuxAPI:
@@ -87,14 +120,20 @@ class TmuxAPI:
     def has_session(self, name: str) -> bool:
         return self._run(["has-session", "-t", name], check=False).returncode == 0
 
-    def list_sessions(self) -> list[Session]:
+    def list_sessions(self, allow_missing_server: bool = False) -> list[Session]:
         proc = self._run(
             [
                 "list-sessions",
                 "-F",
                 LIST_SESSIONS_FORMAT,
-            ]
+            ],
+            check=False,
         )
+        if proc.returncode != 0:
+            message = (proc.stderr or proc.stdout).strip() or "tmux command failed"
+            if allow_missing_server and _tmux_server_missing(message):
+                return []
+            raise TmuxError(message)
         sessions: list[Session] = []
         for line in proc.stdout.splitlines():
             name, attached, windows, last_attached = (line.split("\t") + ["0", "0", "0"])[:4]
@@ -108,20 +147,47 @@ class TmuxAPI:
             )
         return sorted(sessions, key=lambda session: session.last_attached, reverse=True)
 
-    def list_panes(self) -> list[Pane]:
-        proc = self._run(["list-panes", "-a", "-F", LIST_PANES_FORMAT])
+    def list_windows(self, session_name: str) -> list[Window]:
+        proc = self._run(["list-windows", "-t", session_name, "-F", LIST_WINDOWS_FORMAT])
+        windows: list[Window] = []
+        for line in proc.stdout.splitlines():
+            index, name, active, layout = (line.split("\t") + ["0", "", "0", ""])[:4]
+            windows.append(
+                Window(
+                    index=int(index or 0),
+                    name=name,
+                    active=bool(int(active or 0)),
+                    layout=layout,
+                )
+            )
+        return sorted(windows, key=lambda window: window.index)
+
+    def list_panes(self, target: str | None = None) -> list[Pane]:
+        args = ["list-panes"]
+        if target is None:
+            args.append("-a")
+        else:
+            args.extend(["-t", target])
+        args.extend(["-F", LIST_PANES_FORMAT])
+        proc = self._run(args)
         panes: list[Pane] = []
         for line in proc.stdout.splitlines():
-            session_name, pane_id, pane_pid, current_command = (line.split("\t") + ["", "", "0", ""])[:4]
+            session_name, window_index, pane_index, pane_id, pane_pid, current_command, current_path, active = (
+                line.split("\t") + ["", "0", "0", "", "0", "", "", "0"]
+            )[:8]
             panes.append(
                 Pane(
                     session_name=session_name,
                     pane_id=pane_id,
                     pane_pid=int(pane_pid or 0),
                     current_command=current_command,
+                    window_index=int(window_index or 0),
+                    pane_index=int(pane_index or 0),
+                    current_path=current_path,
+                    active=bool(int(active or 0)),
                 )
             )
-        return panes
+        return sorted(panes, key=lambda pane: (pane.session_name, pane.window_index, pane.pane_index))
 
     def capture_pane_tail(self, pane_id: str, lines: int = 40) -> str:
         proc = self._run(["capture-pane", "-p", "-t", pane_id, "-S", f"-{lines}"], check=False)
@@ -154,14 +220,23 @@ class TmuxAPI:
             snapshot[pid] = ProcessInfo(pid=pid, ppid=ppid, comm=comm, args=args)
         return snapshot
 
-    def _pane_has_codex_agent(
+    def process_tree(
+        self,
+    ) -> tuple[dict[int, ProcessInfo], dict[int, list[int]]]:
+        processes = self._process_snapshot()
+        children_by_pid: dict[int, list[int]] = {}
+        for process in processes.values():
+            children_by_pid.setdefault(process.ppid, []).append(process.pid)
+        return processes, children_by_pid
+
+    def pane_codex_process_pid(
         self,
         pane: Pane,
         processes: dict[int, ProcessInfo],
         children_by_pid: dict[int, list[int]],
-    ) -> bool:
+    ) -> int | None:
         if pane.pane_pid <= 0:
-            return False
+            return None
         stack = [pane.pane_pid]
         seen: set[int] = set()
         while stack:
@@ -171,20 +246,39 @@ class TmuxAPI:
             seen.add(pid)
             process = processes.get(pid)
             if process is not None and _is_codex_process(process):
-                return True
+                return pid
             stack.extend(children_by_pid.get(pid, []))
-        return False
+        return None
+
+    def pane_codex_thread_id(
+        self,
+        pane: Pane,
+        processes: dict[int, ProcessInfo] | None = None,
+        children_by_pid: dict[int, list[int]] | None = None,
+    ) -> str | None:
+        if processes is None or children_by_pid is None:
+            processes, children_by_pid = self.process_tree()
+        codex_pid = self.pane_codex_process_pid(pane, processes, children_by_pid)
+        if codex_pid is None:
+            return None
+        proc = subprocess.run(
+            ["lsof", "-p", str(codex_pid)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=self.env,
+        )
+        if proc.returncode != 0:
+            return None
+        return _rollout_thread_id_from_lsof_output(proc.stdout)
 
     def list_session_agent_statuses(self) -> dict[str, AgentStatus]:
         panes = self.list_panes()
-        processes = self._process_snapshot()
-        children_by_pid: dict[int, list[int]] = {}
-        for process in processes.values():
-            children_by_pid.setdefault(process.ppid, []).append(process.pid)
+        processes, children_by_pid = self.process_tree()
 
         statuses: dict[str, AgentStatus] = {}
         for pane in panes:
-            if not self._pane_has_codex_agent(pane, processes, children_by_pid):
+            if self.pane_codex_process_pid(pane, processes, children_by_pid) is None:
                 continue
             current = statuses.get(pane.session_name, AgentStatus())
             is_working = _pane_text_shows_working(self.capture_pane_tail(pane.pane_id))
@@ -250,6 +344,27 @@ class TmuxAPI:
         if command:
             args.append(command)
         return self._run(args, check=False).returncode
+
+    def split_window(
+        self,
+        target: str,
+        start_directory: str | None = None,
+        command: str | None = None,
+    ) -> int:
+        args = ["split-window", "-d", "-t", target]
+        args.extend(["-c", start_directory or self.default_start_directory()])
+        if command:
+            args.append(command)
+        return self._run(args, check=False).returncode
+
+    def select_layout(self, target: str, layout: str) -> None:
+        self._run(["select-layout", "-t", target, layout])
+
+    def select_window(self, target: str) -> None:
+        self._run(["select-window", "-t", target])
+
+    def select_pane(self, target: str) -> None:
+        self._run(["select-pane", "-t", target])
 
     def kill_session(self, session_name: str) -> None:
         self._run(["kill-session", "-t", session_name])

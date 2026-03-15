@@ -12,6 +12,7 @@
   - `l` switches or attaches to the selected session
   - `n` creates a new named session
   - `x` kills the current, marked, or visual selection
+- Automatic restore may rebuild tmux layouts and reopen Codex panes, but it should stay focused on tmux session recovery rather than arbitrary process checkpointing.
 - Do not grow this into a broad session manager unless explicitly asked.
 
 ## Interface Rules
@@ -24,8 +25,10 @@
 ## Implementation Guardrails
 - Keep the code stdlib-only.
 - Keep tmux subprocess calls isolated in `tmux_api.py`.
+- Keep restore snapshots under `~/.tm/state/` and treat them as internal state, not a user-edited config surface.
 - Preserve safe kill semantics by moving attached clients to another session before killing the target.
 - If killing the final non-fallback session requires a temporary session, create it explicitly rather than guessing around tmux internals.
+- Restored non-Codex panes should come back as shells in the saved working directory unless the app has an exact, low-risk resume primitive for that process type.
 
 ## Release Contract
 - Keep `tm` aligned with the workspace release contract.

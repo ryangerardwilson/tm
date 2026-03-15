@@ -7,9 +7,18 @@ from pathlib import Path
 from typing import Sequence
 
 from _version import __version__
-from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
+from snapshot_state import SnapshotError, restore_saved_sessions_if_needed
 from session_tui import browse_sessions
 from tmux_api import TmuxAPI, TmuxError, attach_or_create_session, ensure_index_session
+
+try:
+    from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
+except ModuleNotFoundError:
+    contract_src = Path(__file__).resolve().parents[1] / "rgw_cli_contract" / "src"
+    if not contract_src.exists():
+        raise
+    sys.path.insert(0, str(contract_src))
+    from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
 
 ANSI_GRAY = "\033[38;5;245m"
 ANSI_RESET = "\033[0m"
@@ -31,6 +40,7 @@ features:
   tm
 
   open the tmux session browser in persistent mode inside tmux
+  write restore snapshots hourly from the index session
   # tm p
   tm p
 
@@ -61,6 +71,7 @@ def parse_args(argv: Sequence[str]) -> tuple[str, str | None]:
 def _dispatch(argv: list[str], api: TmuxAPI | None = None) -> int:
     api = TmuxAPI() if api is None else api
     try:
+        restore_saved_sessions_if_needed(api)
         command, value = parse_args(argv)
         if command == "persistent":
             return browse_sessions(api, persistent=True)
@@ -73,6 +84,9 @@ def _dispatch(argv: list[str], api: TmuxAPI | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     except TmuxError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except SnapshotError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except KeyboardInterrupt:

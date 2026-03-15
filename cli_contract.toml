@@ -1,0 +1,10 @@
+[app]
+name = "tm"
+repo = "ryangerardwilson/tm"
+install_strategy = "python-source"
+release_asset = "tm-linux-x64.tar.gz"
+install_test_path = "tests/test_install_contract.py"
+install_usage_extra_path = ".contract/install_usage_extra.txt"
+install_prelude_path = ".contract/install_prelude.sh"
+install_case_arms_path = ".contract/install_case_arms.sh"
+install_post_install_path = ".contract/install_post_install.sh"

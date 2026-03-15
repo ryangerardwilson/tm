@@ -32,6 +32,7 @@ def test_parse_args_rejects_removed_nav_command() -> None:
 def test_main_no_args_opens_browser(monkeypatch) -> None:
     calls: list[object] = []
     ensured: list[object] = []
+    restored: list[object] = []
 
     class FakeAPI:
         pass
@@ -44,12 +45,18 @@ def test_main_no_args_opens_browser(monkeypatch) -> None:
         ensured.append(api)
         return True
 
+    def fake_restore(api):  # type: ignore[no-untyped-def]
+        restored.append(api)
+        return None
+
     api = FakeAPI()
     monkeypatch.setattr(main, "browse_sessions", fake_browse)
     monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", fake_restore)
     assert main.main([], api=api) == 0
     assert calls == [api]
     assert ensured == []
+    assert restored == [api]
 
 
 def test_main_named_session_uses_attach_or_create(monkeypatch) -> None:
@@ -67,6 +74,7 @@ def test_main_named_session_uses_attach_or_create(monkeypatch) -> None:
         ensured.append(api)
         return True
 
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", lambda api: None)
     api = FakeAPI()
     monkeypatch.setattr(main, "attach_or_create_session", fake_attach_or_create)
     monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
@@ -86,6 +94,7 @@ def test_main_persistent_mode_opens_browser_with_flag(monkeypatch) -> None:
         return 0
 
     api = FakeAPI()
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", lambda api: None)
     monkeypatch.setattr(main, "browse_sessions", fake_browse)
     assert main.main(["p"], api=api) == 0
     assert calls == [(api, True)]

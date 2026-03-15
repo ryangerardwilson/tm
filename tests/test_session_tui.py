@@ -10,6 +10,7 @@ from session_tui import (
     _fit_row_segments,
     _format_session_row,
     _handle_normal_key,
+    _maybe_write_hourly_snapshot,
     _handle_prompt_key,
     _visible_sessions,
 )
@@ -234,3 +235,31 @@ def test_fit_row_segments_preserves_agent_suffix_in_narrow_widths() -> None:
     )
     assert suffix_line == AGENT_WORKING_FRAMES[0]
     assert len(base_line) + len(suffix_line) <= 20
+
+
+def test_hourly_snapshot_runs_immediately_for_persistent_browser(monkeypatch) -> None:
+    state = build_state()
+    recorded: list[object] = []
+
+    def fake_write(api):  # type: ignore[no-untyped-def]
+        recorded.append(api)
+
+    api = object()
+    monkeypatch.setattr(session_tui, "write_runtime_snapshot", fake_write)
+    saved_at = _maybe_write_hourly_snapshot(api, state, True, None, now=100.0)
+    assert saved_at == 100.0
+    assert recorded == [api]
+
+
+def test_hourly_snapshot_waits_until_interval_passes(monkeypatch) -> None:
+    state = build_state()
+    recorded: list[object] = []
+
+    def fake_write(api):  # type: ignore[no-untyped-def]
+        recorded.append(api)
+
+    api = object()
+    monkeypatch.setattr(session_tui, "write_runtime_snapshot", fake_write)
+    saved_at = _maybe_write_hourly_snapshot(api, state, True, 100.0, now=200.0)
+    assert saved_at == 100.0
+    assert recorded == []
