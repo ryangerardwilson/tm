@@ -79,6 +79,10 @@ def _is_codex_process(process: ProcessInfo) -> bool:
     )
 
 
+def _is_tm_browser_process(process: ProcessInfo) -> bool:
+    return "main.py p" in process.args or " tm p" in process.args or process.args.endswith("tm p")
+
+
 def _pane_text_shows_working(text: str) -> bool:
     recent_lines = [line.strip().lower() for line in text.splitlines() if line.strip()][-3:]
     return any("working (" in line or "esc to interrupt" in line for line in recent_lines)
@@ -250,6 +254,27 @@ class TmuxAPI:
             stack.extend(children_by_pid.get(pid, []))
         return None
 
+    def pane_has_browser_process(
+        self,
+        pane: Pane,
+        processes: dict[int, ProcessInfo],
+        children_by_pid: dict[int, list[int]],
+    ) -> bool:
+        if pane.pane_pid <= 0:
+            return False
+        stack = [pane.pane_pid]
+        seen: set[int] = set()
+        while stack:
+            pid = stack.pop()
+            if pid in seen:
+                continue
+            seen.add(pid)
+            process = processes.get(pid)
+            if process is not None and _is_tm_browser_process(process):
+                return True
+            stack.extend(children_by_pid.get(pid, []))
+        return False
+
     def pane_codex_thread_id(
         self,
         pane: Pane,
@@ -357,6 +382,9 @@ class TmuxAPI:
             args.append(command)
         return self._run(args, check=False).returncode
 
+    def respawn_pane(self, target: str, command: str) -> int:
+        return self._run(["respawn-pane", "-k", "-t", target, command], check=False).returncode
+
     def select_layout(self, target: str, layout: str) -> None:
         self._run(["select-layout", "-t", target, layout])
 
@@ -404,13 +432,26 @@ def ensure_index_session(api: TmuxAPI) -> bool:
         if rc != 0:
             raise TmuxError(f"Unable to create session: {INDEX_SESSION_NAME}")
         return True
-    if api.has_window(INDEX_SESSION_NAME, INDEX_WINDOW_NAME):
+    if not api.has_window(INDEX_SESSION_NAME, INDEX_WINDOW_NAME):
+        rc = api.new_window(
+            INDEX_SESSION_NAME,
+            INDEX_WINDOW_NAME,
+            command=browser_command,
+        )
+        if rc != 0:
+            raise TmuxError(f"Unable to create session: {INDEX_SESSION_NAME}")
+        return True
+
+    panes = api.list_panes(f"{INDEX_SESSION_NAME}:{INDEX_WINDOW_NAME}")
+    processes, children_by_pid = api.process_tree()
+    if any(
+        api.pane_has_browser_process(pane, processes, children_by_pid)
+        for pane in panes
+    ):
         return False
-    rc = api.new_window(
-        INDEX_SESSION_NAME,
-        INDEX_WINDOW_NAME,
-        command=browser_command,
-    )
+
+    target_pane = panes[0].pane_id if panes else f"{INDEX_SESSION_NAME}:{INDEX_WINDOW_NAME}.0"
+    rc = api.respawn_pane(target_pane, browser_command)
     if rc != 0:
         raise TmuxError(f"Unable to create session: {INDEX_SESSION_NAME}")
     return True

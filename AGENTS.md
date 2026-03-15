@@ -7,7 +7,7 @@
 
 ## Product Boundary
 - `tm` is a narrow tmux utility, not a general tmux wrapper.
-- Keep one primary flow: `tm` opens a curses session browser.
+- Keep one primary flow: `tm` takes the user to the managed `index` session running the persistent curses browser.
 - From inside the browser:
   - `l` switches or attaches to the selected session
   - `n` creates a new named session
@@ -17,7 +17,8 @@
 
 ## Interface Rules
 - Keep the default flow fast and shell-native.
-- Bare `tm` is the deliberate no-arg exception to the workspace default help behavior and must open the curses session browser.
+- Bare `tm` is the deliberate no-arg exception to the workspace default help behavior and must switch or attach to the managed `index` session.
+- Any `tm` invocation must ensure the managed `index` session exists and that its `index` window is running `tm p`.
 - `tm k` should stay dense, grayscale, and keyboard-first.
 - Favor `j`/`k`, arrow keys, `m`, `v`, `x`, `?`, and `q`.
 - Error text should stay short and explicit.

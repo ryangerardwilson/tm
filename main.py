@@ -9,7 +9,7 @@ from typing import Sequence
 from _version import __version__
 from snapshot_state import SnapshotError, restore_saved_sessions_if_needed
 from session_tui import browse_sessions
-from tmux_api import TmuxAPI, TmuxError, attach_or_create_session, ensure_index_session
+from tmux_api import INDEX_SESSION_NAME, TmuxAPI, TmuxError, attach_or_create_session, ensure_index_session
 
 try:
     from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
@@ -35,14 +35,9 @@ flags:
     upgrade to the latest release
 
 features:
-  open the tmux session browser
+  switch to the managed index session running the persistent browser
   # tm
   tm
-
-  open the tmux session browser in persistent mode inside tmux
-  write restore snapshots hourly from the index session
-  # tm p
-  tm p
 
   attach to a named session, or create it first if needed
   # tm s <session_name>
@@ -61,18 +56,20 @@ class UsageError(ValueError):
 def parse_args(argv: Sequence[str]) -> tuple[str, str | None]:
     args = list(argv)
     if not args:
-        return "browse", None
+        return "index", None
     if args == ["p"]:
         return "persistent", None
     if len(args) == 2 and args[0] == "s" and not args[1].startswith("-"):
         return "session", args[1]
-    raise UsageError("Usage: tm | tm p | tm s <session_name>")
+    raise UsageError("Usage: tm | tm s <session_name>")
+
 
 def _dispatch(argv: list[str], api: TmuxAPI | None = None) -> int:
     api = TmuxAPI() if api is None else api
     try:
-        restore_saved_sessions_if_needed(api)
         command, value = parse_args(argv)
+        if command == "index":
+            return attach_or_create_session(api, INDEX_SESSION_NAME)
         if command == "persistent":
             return browse_sessions(api, persistent=True)
         if command == "session":
@@ -84,9 +81,6 @@ def _dispatch(argv: list[str], api: TmuxAPI | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     except TmuxError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    except SnapshotError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
@@ -104,7 +98,19 @@ APP_SPEC = AppSpec(
 
 def main(argv: Sequence[str] | None = None, api: TmuxAPI | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    return run_app(APP_SPEC, args, lambda dispatch_argv: _dispatch(dispatch_argv, api))
+    active_api = TmuxAPI() if api is None else api
+    try:
+        ensure_index_session(active_api)
+        restore_saved_sessions_if_needed(active_api)
+    except TmuxError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except SnapshotError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+    return run_app(APP_SPEC, args, lambda dispatch_argv: _dispatch(dispatch_argv, active_api))
 
 
 if __name__ == "__main__":

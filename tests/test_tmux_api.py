@@ -125,10 +125,19 @@ def test_ensure_index_session_creates_missing_index() -> None:
 
 
 def test_ensure_index_session_skips_existing_index() -> None:
-    api = FakeAPI(
+    class BrowserAPI(FakeAPI):
+        def _process_snapshot(self) -> dict[int, ProcessInfo]:
+            return {
+                100: ProcessInfo(100, 1, "python3", "python3 /tmp/tm/main.py p"),
+            }
+
+    api = BrowserAPI(
         {
             ("has-session", "-t", "index"): FakeProc(returncode=0),
             ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=0, stdout="@1"),
+            ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT): FakeProc(
+                stdout="index\t0\t0\t%0\t100\tpython3\t/tmp/home\t1\n"
+            ),
         }
     )
     created = ensure_index_session(api)
@@ -136,6 +145,7 @@ def test_ensure_index_session_skips_existing_index() -> None:
     assert api.calls == [
         ("has-session", "-t", "index"),
         ("display-message", "-p", "-t", "index:index", "#{window_id}"),
+        ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT),
     ]
 
 
@@ -175,6 +185,36 @@ def test_ensure_index_session_creates_missing_browser_window() -> None:
             "/tmp/home",
             browser_command,
         ),
+    ]
+
+
+def test_ensure_index_session_respawns_browser_when_window_exists_without_tm_p() -> None:
+    browser_command = index_browser_command()
+
+    class BrokenIndexAPI(FakeAPI):
+        def _process_snapshot(self) -> dict[int, ProcessInfo]:
+            return {
+                100: ProcessInfo(100, 1, "bash", "bash"),
+            }
+
+    api = BrokenIndexAPI(
+        {
+            ("has-session", "-t", "index"): FakeProc(returncode=0),
+            ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=0, stdout="@1"),
+            ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT): FakeProc(
+                stdout="index\t0\t0\t%0\t100\tbash\t/tmp/home\t1\n"
+            ),
+            ("respawn-pane", "-k", "-t", "%0", browser_command): FakeProc(returncode=0),
+        },
+        env={"HOME": "/tmp/home"},
+    )
+    created = ensure_index_session(api)
+    assert created is True
+    assert api.calls == [
+        ("has-session", "-t", "index"),
+        ("display-message", "-p", "-t", "index:index", "#{window_id}"),
+        ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT),
+        ("respawn-pane", "-k", "-t", "%0", browser_command),
     ]
 
 

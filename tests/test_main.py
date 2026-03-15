@@ -6,7 +6,7 @@ import main
 
 
 def test_parse_args_help_variants() -> None:
-    assert main.parse_args([]) == ("browse", None)
+    assert main.parse_args([]) == ("index", None)
     assert main.parse_args(["p"]) == ("persistent", None)
     assert main.parse_args(["s", "root"]) == ("session", "root")
 
@@ -15,7 +15,7 @@ def test_parse_args_rejects_unknown_shape() -> None:
     try:
         main.parse_args(["-x"])
     except main.UsageError as exc:
-        assert str(exc) == "Usage: tm | tm p | tm s <session_name>"
+        assert str(exc) == "Usage: tm | tm s <session_name>"
     else:
         raise AssertionError("UsageError not raised")
 
@@ -24,44 +24,15 @@ def test_parse_args_rejects_removed_nav_command() -> None:
     try:
         main.parse_args(["nav"])
     except main.UsageError as exc:
-        assert str(exc) == "Usage: tm | tm p | tm s <session_name>"
+        assert str(exc) == "Usage: tm | tm s <session_name>"
     else:
         raise AssertionError("UsageError not raised")
 
 
-def test_main_no_args_opens_browser(monkeypatch) -> None:
-    calls: list[object] = []
-    ensured: list[object] = []
-    restored: list[object] = []
-
-    class FakeAPI:
-        pass
-
-    def fake_browse(api):  # type: ignore[no-untyped-def]
-        calls.append(api)
-        return 0
-
-    def fake_ensure_index(api):  # type: ignore[no-untyped-def]
-        ensured.append(api)
-        return True
-
-    def fake_restore(api):  # type: ignore[no-untyped-def]
-        restored.append(api)
-        return None
-
-    api = FakeAPI()
-    monkeypatch.setattr(main, "browse_sessions", fake_browse)
-    monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
-    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", fake_restore)
-    assert main.main([], api=api) == 0
-    assert calls == [api]
-    assert ensured == []
-    assert restored == [api]
-
-
-def test_main_named_session_uses_attach_or_create(monkeypatch) -> None:
+def test_main_no_args_switches_to_index_session(monkeypatch) -> None:
     calls: list[tuple[object, str]] = []
     ensured: list[object] = []
+    restored: list[object] = []
 
     class FakeAPI:
         pass
@@ -74,17 +45,54 @@ def test_main_named_session_uses_attach_or_create(monkeypatch) -> None:
         ensured.append(api)
         return True
 
-    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", lambda api: None)
+    def fake_restore(api):  # type: ignore[no-untyped-def]
+        restored.append(api)
+        return None
+
     api = FakeAPI()
     monkeypatch.setattr(main, "attach_or_create_session", fake_attach_or_create)
     monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", fake_restore)
+    assert main.main([], api=api) == 0
+    assert calls == [(api, "index")]
+    assert ensured == [api]
+    assert restored == [api]
+
+
+def test_main_named_session_uses_attach_or_create(monkeypatch) -> None:
+    calls: list[tuple[object, str]] = []
+    ensured: list[object] = []
+    restored: list[object] = []
+
+    class FakeAPI:
+        pass
+
+    def fake_attach_or_create(api, session_name):  # type: ignore[no-untyped-def]
+        calls.append((api, session_name))
+        return 0
+
+    def fake_ensure_index(api):  # type: ignore[no-untyped-def]
+        ensured.append(api)
+        return True
+
+    def fake_restore(api):  # type: ignore[no-untyped-def]
+        restored.append(api)
+        return None
+
+    api = FakeAPI()
+    monkeypatch.setattr(main, "attach_or_create_session", fake_attach_or_create)
+    monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", fake_restore)
     assert main.main(["s", "root"], api=api) == 0
     assert calls == [(api, "root")]
-    assert ensured == [api]
+    assert ensured == [api, api]
+    assert restored == [api]
 
 
 def test_main_persistent_mode_opens_browser_with_flag(monkeypatch) -> None:
     calls: list[tuple[object, bool]] = []
+    ensured: list[object] = []
+    restored: list[object] = []
 
     class FakeAPI:
         pass
@@ -93,15 +101,28 @@ def test_main_persistent_mode_opens_browser_with_flag(monkeypatch) -> None:
         calls.append((api, persistent))
         return 0
 
+    def fake_ensure_index(api):  # type: ignore[no-untyped-def]
+        ensured.append(api)
+        return True
+
+    def fake_restore(api):  # type: ignore[no-untyped-def]
+        restored.append(api)
+        return None
+
     api = FakeAPI()
-    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", lambda api: None)
+    monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", fake_restore)
     monkeypatch.setattr(main, "browse_sessions", fake_browse)
     assert main.main(["p"], api=api) == 0
     assert calls == [(api, True)]
+    assert ensured == [api]
+    assert restored == [api]
 
 
 def test_main_delegates_upgrade_to_contract_runtime(monkeypatch) -> None:
     recorded: dict[str, object] = {}
+    ensured: list[object] = []
+    restored: list[object] = []
 
     def fake_run_app(spec, argv, dispatch):  # type: ignore[no-untyped-def]
         recorded["spec"] = spec
@@ -109,9 +130,21 @@ def test_main_delegates_upgrade_to_contract_runtime(monkeypatch) -> None:
         recorded["dispatch"] = dispatch
         return 0
 
+    def fake_ensure_index(api):  # type: ignore[no-untyped-def]
+        ensured.append(api)
+        return True
+
+    def fake_restore(api):  # type: ignore[no-untyped-def]
+        restored.append(api)
+        return None
+
     monkeypatch.setattr(main, "run_app", fake_run_app)
+    monkeypatch.setattr(main, "ensure_index_session", fake_ensure_index)
+    monkeypatch.setattr(main, "restore_saved_sessions_if_needed", fake_restore)
     rc = main.main(["-u"])
     assert rc == 0
     assert recorded["spec"] == main.APP_SPEC
     assert recorded["argv"] == ["-u"]
     assert callable(recorded["dispatch"])
+    assert len(ensured) == 1
+    assert len(restored) == 1

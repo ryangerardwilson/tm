@@ -32,7 +32,6 @@ want a different tmux key name.
 
 ```bash
 tm
-tm p
 tm -h
 tm s root
 tm -v
@@ -43,19 +42,16 @@ tm -u
 at `0.0.0`; tagged release artifacts stamp the real release version during the
 release workflow.
 
-### Browser
+### Index Session
 
 ```bash
 tm
 ```
 
-Persistent browser mode inside tmux:
-
-```bash
-tm p
-```
+`tm` switches to the managed `index` session outside tmux or switches your current tmux client to it inside tmux.
 
 The persistent index browser writes an automatic restore snapshot once per hour in the background.
+Every `tm` invocation also ensures the managed `index` session exists and that its `index` window is running `tm p`.
 
 Core actions:
 
@@ -69,7 +65,7 @@ Core actions:
 - `q`: quit the picker
 
 Outside tmux, `l` attaches to the selected session. Inside tmux, it switches the current client to that session.
-In `tm p`, the picker stays running in its original tmux pane after a switch and refreshes the session list, so ordering is updated when you jump back to it later.
+In the managed `index` session, the picker stays running in its original tmux pane after a switch and refreshes the session list, so ordering is updated when you jump back to it later.
 Sessions with actively working Codex panes show the same compact animated pulse used in `loc`.
 
 ## Automatic Restore
