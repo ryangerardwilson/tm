@@ -101,10 +101,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 _latest_version=""
+latest_version_from_redirect() {
+  command -v curl >/dev/null 2>&1 || die "'curl' is required"
+  curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" \
+    | sed -n 's#.*/releases/tag/v\([^/?#[:space:]]*\).*#\1#p'
+}
 get_latest_version() {
   if [[ -z "${_latest_version}" ]]; then
-    _latest_version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-      | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"\\n]*\)".*/\1/p')
+    if command -v gh >/dev/null 2>&1; then
+      _latest_version=$(gh release view --repo "${REPO}" --json tagName --jq '.tagName' 2>/dev/null || true)
+      _latest_version="${_latest_version#v}"
+    fi
+    if [[ -z "${_latest_version}" ]]; then
+      _latest_version="$(latest_version_from_redirect || true)"
+    fi
     [[ -n "${_latest_version}" ]] || die "Unable to determine latest release"
   fi
   printf '%s\n' "${_latest_version}"
@@ -195,7 +205,7 @@ write_tmux_snippet() {
     echo "# Managed by tm install.sh"
     declare -A seen=()
     local key
-    for key in "$tmux_index_key" "$previous_tmux_index_key" "C-Insert" "Insert" "F8" "F9" "F12"; do
+    for key in "$tmux_index_key" "$previous_tmux_index_key" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do
       [[ -n "$key" ]] || continue
       if [[ -n "${seen[$key]:-}" ]]; then
         continue
