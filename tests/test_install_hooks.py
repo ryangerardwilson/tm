@@ -21,4 +21,4 @@ def test_release_workflow_stamps_version_and_publishes_bundle() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert 'printf \'__version__ = "%s"\\n\'' in workflow
     assert "tm-linux-x64.tar.gz" in workflow
-    assert "cp main.py session_tui.py tmux_api.py _version.py README.md install.sh requirements.txt dist/tm/" in workflow
+    assert "cp main.py session_tui.py snapshot_state.py tmux_api.py _version.py README.md install.sh requirements.txt dist/tm/" in workflow
