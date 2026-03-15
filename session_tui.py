@@ -21,8 +21,6 @@ HELP_LINES = [
     "  kill the current session, marked sessions, or visual selection",
     "n",
     "  create a new named session",
-    "r",
-    "  refresh the session list",
     "?",
     "  toggle this help",
     "q",
@@ -255,6 +253,7 @@ def _enter_session(api: TmuxAPI, state: SessionBrowserState, persistent: bool = 
     if api.env.get("TMUX"):
         api.switch_client(current)
         if persistent:
+            _refresh_sessions(api, state, preferred=current)
             state.status_message = f"Switched to {current}"
             return None
         return 0
@@ -336,8 +335,6 @@ def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None
         return "kill", None
     if key == ord("n"):
         return "prompt", "New session: "
-    if key == ord("r"):
-        return "refresh", None
     if 32 <= key <= 126:
         state.status_message = "Unknown command"
         return None, None
@@ -370,10 +367,6 @@ def browse_sessions(api: TmuxAPI, persistent: bool = False) -> int:
                 return 0
             if action == "prompt" and value is not None:
                 state.begin_prompt(value)
-                continue
-            if action == "refresh":
-                _refresh_sessions(api, state, preferred=state.current_name())
-                state.status_message = "Refreshed"
                 continue
             if action == "enter":
                 rc = _enter_session(api, state, persistent=persistent)

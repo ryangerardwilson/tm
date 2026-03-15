@@ -7,6 +7,8 @@ APP_HOME="$HOME/.${APP}"
 INSTALL_DIR="$APP_HOME/bin"
 APP_DIR="$APP_HOME/app"
 FILENAME="${APP}-linux-x64.tar.gz"
+TMUX_SNIPPET_DIR="$HOME/.tmux"
+TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -23,6 +25,7 @@ Options:
   -v [<version>]             Install a specific release (e.g. 0.1.0 or v0.1.0)
                              Without an argument, print the latest release version and exit
   -u                         Reinstall the latest release if it is newer (upgrade)
+      --tmux-key <key>       Bind the index-session shortcut in tmux (default: C-Insert)
   -b, --binary <path>        Install from a local release bundle
       --no-modify-path       Skip editing shell rc files
 EOF
@@ -36,6 +39,7 @@ binary_path=""
 no_modify_path=false
 show_latest=false
 upgrade=false
+tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,6 +63,11 @@ while [[ $# -gt 0 ]]; do
     -b|--binary)
       [[ -n "${2:-}" ]] || die "--binary requires a path"
       binary_path="$2"
+      shift 2
+      ;;
+    --tmux-key)
+      [[ -n "${2:-}" ]] || die "--tmux-key requires a tmux key name"
+      tmux_index_key="$2"
       shift 2
       ;;
     --no-modify-path)
@@ -161,6 +170,7 @@ fi
 tar -xzf "$tmp_dir/$FILENAME" -C "$tmp_dir"
 [[ -f "$tmp_dir/${APP}/main.py" ]] || die "Archive missing ${APP}/main.py"
 [[ -f "$tmp_dir/${APP}/_version.py" ]] || die "Archive missing ${APP}/_version.py"
+[[ -f "$tmp_dir/${APP}/install.sh" ]] || die "Archive missing ${APP}/install.sh"
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
@@ -173,6 +183,57 @@ set -euo pipefail
 exec python3 "${HOME}/.${APP}/app/${APP}/main.py" "\$@"
 EOF
 chmod 755 "$INSTALL_DIR/$APP"
+
+write_tmux_snippet() {
+  mkdir -p "$TMUX_SNIPPET_DIR"
+  cat > "$TMUX_SNIPPET_FILE" <<EOF
+# Managed by tm install.sh
+unbind -n ${tmux_index_key}
+bind -n ${tmux_index_key} switch-client -t index
+EOF
+}
+
+ensure_tmux_config_sources_snippet() {
+  local tmux_conf="$HOME/.tmux.conf"
+  local source_line="source-file $TMUX_SNIPPET_FILE"
+  local tmp
+
+  if [[ ! -e "$tmux_conf" ]]; then
+    touch "$tmux_conf"
+  fi
+
+  tmp=$(mktemp "${TMPDIR:-/tmp}/${APP}-tmux-conf.XXXXXX")
+  python3 - "$tmux_conf" "$tmp" "$source_line" <<'PY'
+from pathlib import Path
+import sys
+
+tmux_conf = Path(sys.argv[1])
+tmp = Path(sys.argv[2])
+source_line = sys.argv[3]
+legacy_lines = {
+    "unbind -n C-Insert",
+    "bind -n C-Insert switch-client -t index",
+    "unbind -n Insert",
+    "bind -n Insert switch-client -t index",
+}
+
+existing = tmux_conf.read_text() if tmux_conf.exists() else ""
+lines = [line for line in existing.splitlines() if line.strip() not in legacy_lines]
+while lines and lines[-1] == "":
+    lines.pop()
+if source_line not in lines:
+    if lines:
+        lines.append("")
+    lines.append(f"# {Path(source_line.split(maxsplit=1)[1]).stem.upper()}")
+    lines.append(source_line)
+tmp.write_text("\n".join(lines) + "\n")
+PY
+  mv "$tmp" "$tmux_conf"
+}
+
+write_tmux_snippet
+ensure_tmux_config_sources_snippet
+info "Managed tmux index shortcut with key ${tmux_index_key}"
 
 maybe_add_path() {
   local command=$1

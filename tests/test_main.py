@@ -108,3 +108,11 @@ def test_upgrade_app_uses_installer(monkeypatch) -> None:
     rc = main.upgrade_app()
     assert rc == 0
     assert calls == [["/usr/bin/env", "bash", str(Path(main.__file__).resolve().parent / "install.sh"), "-u"]]
+
+
+def test_upgrade_app_reports_missing_installer(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(main, "INSTALL_SCRIPT", Path("/tmp/does-not-exist-install.sh"))
+    rc = main.upgrade_app()
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.err.strip() == "install.sh is missing: /tmp/does-not-exist-install.sh"

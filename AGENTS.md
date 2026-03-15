@@ -30,4 +30,5 @@
 ## Release Contract
 - Keep `tm` aligned with the workspace release contract.
 - `install.sh` installs tagged release bundles into `~/.tm/app` and exposes `~/.tm/bin/tm`.
+- `install.sh` owns the tmux shortcut snippet for jumping to the index session; keep that update idempotent and isolated from unrelated user tmux config.
 - Tagged builds stamp `_version.py` in the release artifact; the checked-in file stays at `0.0.0`.

@@ -21,6 +21,12 @@ Installer shortcuts:
 - `./install.sh -v`: print the latest release version
 - `./install.sh -v 0.1.0`: install a specific release
 - `./install.sh -u`: upgrade to the latest release if newer
+- `./install.sh --tmux-key Insert -u`: keep the tmux index shortcut but bind it to plain `Insert`
+
+The installer manages a small tmux snippet at `~/.tmux/tm.conf` and ensures `~/.tmux.conf`
+sources it, so the index-session shortcut is repo-managed instead of hand-maintained.
+The default shortcut key is `C-Insert`; plain `Insert` is possible if your terminal sends it
+cleanly.
 
 ## Usage
 
@@ -57,12 +63,11 @@ Core actions:
 - `v`: toggle visual selection for a contiguous range
 - `x`: kill the current session, marked sessions, or the visual selection
 - `n`: create a new named session
-- `r`: refresh the session list
 - `?`: toggle help
 - `q`: quit the picker
 
 Outside tmux, `l` attaches to the selected session. Inside tmux, it switches the current client to that session.
-In `tm p`, the picker stays running in its original tmux pane after a switch, so you can jump back to it later.
+In `tm p`, the picker stays running in its original tmux pane after a switch and refreshes the session list, so ordering is updated when you jump back to it later.
 
 ### Direct Session
 

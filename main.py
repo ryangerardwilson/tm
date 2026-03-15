@@ -60,7 +60,7 @@ def print_help() -> None:
 
 def upgrade_app() -> int:
     if not INSTALL_SCRIPT.exists():
-        print("install.sh is missing", file=sys.stderr)
+        print(f"install.sh is missing: {INSTALL_SCRIPT}", file=sys.stderr)
         return 1
     proc = subprocess.run(
         ["/usr/bin/env", "bash", str(INSTALL_SCRIPT), "-u"],

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import curses
 
+import session_tui
 from session_tui import (
     SessionBrowserState,
     _enter_session,
@@ -67,13 +68,6 @@ def test_n_opens_new_session_prompt() -> None:
     assert value == "New session: "
 
 
-def test_r_requests_refresh() -> None:
-    state = build_state()
-    action, value = _handle_normal_key(state, ord("r"))
-    assert action == "refresh"
-    assert value is None
-
-
 def test_index_session_is_hidden_from_browser_rows() -> None:
     sessions = [
         Session("index", attached=0, windows=1),
@@ -95,8 +89,9 @@ def test_prompt_collects_name_and_submits() -> None:
     assert value == "work"
 
 
-def test_enter_from_index_session_switches_without_exiting() -> None:
+def test_enter_from_index_session_switches_and_refreshes_order(monkeypatch) -> None:
     state = build_state()
+    state.index = 1
 
     class FakeAPI:
         env = {"TMUX": "/tmp/socket,1,0"}
@@ -107,11 +102,22 @@ def test_enter_from_index_session_switches_without_exiting() -> None:
         def switch_client(self, target_session: str) -> None:
             self.switched.append(target_session)
 
+        def list_sessions(self) -> list[Session]:
+            return [
+                Session("b", attached=1, windows=2),
+                Session("a", attached=0, windows=1),
+                Session("c", attached=0, windows=3),
+                Session("index", attached=0, windows=1),
+            ]
+
+    monkeypatch.setattr(session_tui, "ensure_index_session", lambda api: False)
     api = FakeAPI()
     rc = _enter_session(api, state, persistent=True)
     assert rc is None
-    assert api.switched == ["a"]
-    assert state.status_message == "Switched to a"
+    assert api.switched == ["b"]
+    assert [session.name for session in state.sessions] == ["b", "a", "c"]
+    assert state.index == 0
+    assert state.status_message == "Switched to b"
 
 
 def test_enter_from_non_index_tmux_session_exits_browser() -> None:
