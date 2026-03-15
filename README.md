@@ -68,6 +68,7 @@ Core actions:
 
 Outside tmux, `l` attaches to the selected session. Inside tmux, it switches the current client to that session.
 In `tm p`, the picker stays running in its original tmux pane after a switch and refreshes the session list, so ordering is updated when you jump back to it later.
+Sessions with actively working Codex panes show the same compact animated pulse used in `loc`.
 
 ### Direct Session
 

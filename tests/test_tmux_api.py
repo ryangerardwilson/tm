@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import tmux_api
 from tmux_api import (
+    AgentStatus,
     INDEX_WINDOW_NAME,
+    LIST_PANES_FORMAT,
     TmuxAPI,
+    ProcessInfo,
     attach_or_create_session,
     ensure_index_session,
     index_browser_command,
@@ -184,6 +187,34 @@ def test_list_sessions_orders_by_most_recent_attach() -> None:
     )
     sessions = api.list_sessions()
     assert [session.name for session in sessions] == ["newer", "older", "never"]
+
+
+def test_list_session_agent_statuses_counts_working_and_idle_codex_panes() -> None:
+    class AgentAPI(FakeAPI):
+        def _process_snapshot(self) -> dict[int, ProcessInfo]:
+            return {
+                100: ProcessInfo(100, 1, "node-MainThread", "node /home/ryan/.npm-global/bin/codex"),
+                101: ProcessInfo(101, 100, "codex", "/vendor/codex/codex"),
+                200: ProcessInfo(200, 1, "node-MainThread", "node /home/ryan/.npm-global/bin/codex"),
+                201: ProcessInfo(201, 200, "codex", "/vendor/codex/codex"),
+                300: ProcessInfo(300, 1, "bash", "bash"),
+            }
+
+    api = AgentAPI(
+        {
+            ("list-panes", "-a", "-F", LIST_PANES_FORMAT): FakeProc(
+                stdout="work\t%1\t100\tnode\nwork\t%2\t200\tnode\nnotes\t%3\t300\tbash\n"
+            ),
+            ("capture-pane", "-p", "-t", "%1", "-S", "-40"): FakeProc(
+                stdout="• Working (28s • esc to interrupt)\n"
+            ),
+            ("capture-pane", "-p", "-t", "%2", "-S", "-40"): FakeProc(
+                stdout="› Explain this codebase\n"
+            ),
+        }
+    )
+    statuses = api.list_session_agent_statuses()
+    assert statuses == {"work": AgentStatus(total=2, working=1, idle=1)}
 
 
 def test_kill_session_safely_moves_clients_then_kills() -> None:

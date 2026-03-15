@@ -13,6 +13,31 @@ class TmuxError(RuntimeError):
 
 INDEX_SESSION_NAME = "index"
 INDEX_WINDOW_NAME = "index"
+LIST_SESSIONS_FORMAT = "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_last_attached}"
+LIST_PANES_FORMAT = "#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_command}"
+
+
+@dataclass(frozen=True)
+class AgentStatus:
+    total: int = 0
+    working: int = 0
+    idle: int = 0
+
+
+@dataclass(frozen=True)
+class Pane:
+    session_name: str
+    pane_id: str
+    pane_pid: int
+    current_command: str
+
+
+@dataclass(frozen=True)
+class ProcessInfo:
+    pid: int
+    ppid: int
+    comm: str
+    args: str
 
 
 @dataclass(frozen=True)
@@ -21,6 +46,22 @@ class Session:
     attached: int
     windows: int
     last_attached: int = 0
+    agent_total: int = 0
+    agent_working: int = 0
+    agent_idle: int = 0
+
+
+def _is_codex_process(process: ProcessInfo) -> bool:
+    return (
+        process.comm == "codex"
+        or "/bin/codex" in process.args
+        or "@openai/codex" in process.args
+    )
+
+
+def _pane_text_shows_working(text: str) -> bool:
+    recent_lines = [line.strip().lower() for line in text.splitlines() if line.strip()][-3:]
+    return any("working (" in line or "esc to interrupt" in line for line in recent_lines)
 
 
 class TmuxAPI:
@@ -51,7 +92,7 @@ class TmuxAPI:
             [
                 "list-sessions",
                 "-F",
-                "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_last_attached}",
+                LIST_SESSIONS_FORMAT,
             ]
         )
         sessions: list[Session] = []
@@ -66,6 +107,93 @@ class TmuxAPI:
                 )
             )
         return sorted(sessions, key=lambda session: session.last_attached, reverse=True)
+
+    def list_panes(self) -> list[Pane]:
+        proc = self._run(["list-panes", "-a", "-F", LIST_PANES_FORMAT])
+        panes: list[Pane] = []
+        for line in proc.stdout.splitlines():
+            session_name, pane_id, pane_pid, current_command = (line.split("\t") + ["", "", "0", ""])[:4]
+            panes.append(
+                Pane(
+                    session_name=session_name,
+                    pane_id=pane_id,
+                    pane_pid=int(pane_pid or 0),
+                    current_command=current_command,
+                )
+            )
+        return panes
+
+    def capture_pane_tail(self, pane_id: str, lines: int = 40) -> str:
+        proc = self._run(["capture-pane", "-p", "-t", pane_id, "-S", f"-{lines}"], check=False)
+        if proc.returncode != 0:
+            return ""
+        return proc.stdout
+
+    def _process_snapshot(self) -> dict[int, ProcessInfo]:
+        proc = subprocess.run(
+            ["ps", "-eo", "pid=,ppid=,comm=,args="],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=self.env,
+        )
+        if proc.returncode != 0:
+            return {}
+        snapshot: dict[int, ProcessInfo] = {}
+        for line in proc.stdout.splitlines():
+            parts = line.split(None, 3)
+            if len(parts) < 3:
+                continue
+            pid_text, ppid_text, comm = parts[:3]
+            args = parts[3] if len(parts) == 4 else comm
+            try:
+                pid = int(pid_text)
+                ppid = int(ppid_text)
+            except ValueError:
+                continue
+            snapshot[pid] = ProcessInfo(pid=pid, ppid=ppid, comm=comm, args=args)
+        return snapshot
+
+    def _pane_has_codex_agent(
+        self,
+        pane: Pane,
+        processes: dict[int, ProcessInfo],
+        children_by_pid: dict[int, list[int]],
+    ) -> bool:
+        if pane.pane_pid <= 0:
+            return False
+        stack = [pane.pane_pid]
+        seen: set[int] = set()
+        while stack:
+            pid = stack.pop()
+            if pid in seen:
+                continue
+            seen.add(pid)
+            process = processes.get(pid)
+            if process is not None and _is_codex_process(process):
+                return True
+            stack.extend(children_by_pid.get(pid, []))
+        return False
+
+    def list_session_agent_statuses(self) -> dict[str, AgentStatus]:
+        panes = self.list_panes()
+        processes = self._process_snapshot()
+        children_by_pid: dict[int, list[int]] = {}
+        for process in processes.values():
+            children_by_pid.setdefault(process.ppid, []).append(process.pid)
+
+        statuses: dict[str, AgentStatus] = {}
+        for pane in panes:
+            if not self._pane_has_codex_agent(pane, processes, children_by_pid):
+                continue
+            current = statuses.get(pane.session_name, AgentStatus())
+            is_working = _pane_text_shows_working(self.capture_pane_tail(pane.pane_id))
+            statuses[pane.session_name] = AgentStatus(
+                total=current.total + 1,
+                working=current.working + int(is_working),
+                idle=current.idle + int(not is_working),
+            )
+        return statuses
 
     def list_client_ttys(self, session_name: str) -> list[str]:
         proc = self._run(["list-clients", "-t", session_name, "-F", "#{client_tty}"], check=False)

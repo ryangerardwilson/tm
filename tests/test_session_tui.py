@@ -4,14 +4,16 @@ import curses
 
 import session_tui
 from session_tui import (
+    AGENT_WORKING_FRAMES,
     SessionBrowserState,
     _enter_session,
+    _fit_row_segments,
     _format_session_row,
     _handle_normal_key,
     _handle_prompt_key,
     _visible_sessions,
 )
-from tmux_api import Session
+from tmux_api import AgentStatus, Session
 
 
 def build_state() -> SessionBrowserState:
@@ -110,6 +112,9 @@ def test_enter_from_index_session_switches_and_refreshes_order(monkeypatch) -> N
                 Session("index", attached=0, windows=1),
             ]
 
+        def list_session_agent_statuses(self) -> dict[str, AgentStatus]:
+            return {}
+
     monkeypatch.setattr(session_tui, "ensure_index_session", lambda api: False)
     api = FakeAPI()
     rc = _enter_session(api, state, persistent=True)
@@ -138,8 +143,20 @@ def test_enter_from_non_index_tmux_session_exits_browser() -> None:
     assert api.switched == ["a"]
 
 
+def test_sync_agent_statuses_updates_existing_rows_without_reordering() -> None:
+    state = build_state()
+    state.index = 1
+    state.sync_agent_statuses({"b": AgentStatus(total=2, working=1, idle=1)})
+    assert [session.name for session in state.sessions] == ["a", "b", "c"]
+    assert state.index == 1
+    assert state.sessions[0].agent_total == 0
+    assert state.sessions[1].agent_total == 2
+    assert state.sessions[1].agent_working == 1
+    assert state.sessions[1].agent_idle == 1
+
+
 def test_current_row_uses_bold_not_reverse() -> None:
-    line, attrs = _format_session_row(
+    line, agent_suffix, attrs = _format_session_row(
         "work",
         is_current=True,
         is_marked=False,
@@ -147,12 +164,13 @@ def test_current_row_uses_bold_not_reverse() -> None:
         attached=False,
     )
     assert line == ">   work"
+    assert agent_suffix == ""
     assert attrs & curses.A_BOLD
     assert not attrs & curses.A_REVERSE
 
 
 def test_visual_row_uses_reverse_video() -> None:
-    line, attrs = _format_session_row(
+    line, agent_suffix, attrs = _format_session_row(
         "work",
         is_current=False,
         is_marked=True,
@@ -160,5 +178,59 @@ def test_visual_row_uses_reverse_video() -> None:
         attached=True,
     )
     assert line == " *+ work (attached)"
+    assert agent_suffix == ""
     assert attrs & curses.A_REVERSE
     assert not attrs & curses.A_BOLD
+
+
+def test_session_row_shows_working_animation_only_when_agents_are_active() -> None:
+    line, agent_suffix, _ = _format_session_row(
+        "work",
+        is_current=False,
+        is_marked=False,
+        is_visual=False,
+        attached=False,
+        agent_total=1,
+        agent_working=0,
+        agent_idle=1,
+    )
+    assert line == "    work"
+    assert agent_suffix == ""
+
+    line, agent_suffix, _ = _format_session_row(
+        "notes",
+        is_current=False,
+        is_marked=False,
+        is_visual=False,
+        attached=False,
+        agent_total=2,
+        agent_working=1,
+        agent_idle=1,
+        animation_step=2,
+    )
+    assert line == "    notes"
+    assert agent_suffix == AGENT_WORKING_FRAMES[2]
+
+    line, agent_suffix, _ = _format_session_row(
+        "repo_tm",
+        is_current=False,
+        is_marked=False,
+        is_visual=False,
+        attached=False,
+        agent_total=3,
+        agent_working=2,
+        agent_idle=1,
+        animation_step=5,
+    )
+    assert line == "    repo_tm"
+    assert agent_suffix == AGENT_WORKING_FRAMES[5]
+
+
+def test_fit_row_segments_preserves_agent_suffix_in_narrow_widths() -> None:
+    base_line, suffix_line = _fit_row_segments(
+        "    repo_tm (attached)",
+        AGENT_WORKING_FRAMES[0],
+        20,
+    )
+    assert suffix_line == AGENT_WORKING_FRAMES[0]
+    assert len(base_line) + len(suffix_line) <= 20

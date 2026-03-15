@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import curses
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from tmux_api import INDEX_SESSION_NAME, Session, TmuxAPI, TmuxError, ensure_index_session, kill_sessions_safely
+from tmux_api import (
+    INDEX_SESSION_NAME,
+    AgentStatus,
+    Session,
+    TmuxAPI,
+    TmuxError,
+    ensure_index_session,
+    kill_sessions_safely,
+)
 
 
 HELP_LINES = [
@@ -27,6 +35,19 @@ HELP_LINES = [
     "  quit",
 ]
 
+ANIMATION_TIMEOUT_MS = 60
+AGENT_STATUS_REFRESH_TICKS = 16
+AGENT_WORKING_FRAMES = [
+    " ◐◐◐◐◐◐",
+    " ◓◓◓◓◓◓",
+    " ◑◑◑◑◑◑",
+    " ◒◒◒◒◒◒",
+    " ◐◓◑◒◐◓",
+    " ◓◑◒◐◓◑",
+    " ◑◒◐◓◑◒",
+    " ◒◐◓◑◒◐",
+]
+
 
 @dataclass
 class SessionBrowserState:
@@ -41,6 +62,8 @@ class SessionBrowserState:
     prompt_active: bool = False
     prompt_buffer: str = ""
     prompt_label: str = ""
+    animation_step: int = 0
+    agent_refresh_tick: int = 0
 
     def current_name(self) -> str | None:
         if not self.sessions:
@@ -123,6 +146,18 @@ class SessionBrowserState:
         else:
             self.index = max(0, min(self.index, len(sessions) - 1))
 
+    def sync_agent_statuses(self, statuses: dict[str, AgentStatus]) -> None:
+        default = AgentStatus()
+        self.sessions = [
+            replace(
+                session,
+                agent_total=statuses.get(session.name, default).total,
+                agent_working=statuses.get(session.name, default).working,
+                agent_idle=statuses.get(session.name, default).idle,
+            )
+            for session in self.sessions
+        ]
+
     def status_line(self) -> str:
         parts = [f"{len(self.sessions)} session(s)"]
         if self.marked:
@@ -137,6 +172,7 @@ class SessionBrowserState:
 def _setup_curses(stdscr: curses.window) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
+    stdscr.timeout(ANIMATION_TIMEOUT_MS)
     try:
         curses.noecho()
         curses.raw()
@@ -183,14 +219,27 @@ def _draw_sessions(stdscr: curses.window, state: SessionBrowserState) -> None:
         is_current = session_index == state.index
         is_marked = session.name in state.marked
         is_visual = session_index in visual_indexes
-        line, attrs = _format_session_row(
+        line, agent_suffix, attrs = _format_session_row(
             session.name,
             is_current=is_current,
             is_marked=is_marked,
             is_visual=is_visual,
             attached=bool(session.attached),
+            agent_total=session.agent_total,
+            agent_working=session.agent_working,
+            agent_idle=session.agent_idle,
+            animation_step=state.animation_step,
         )
-        stdscr.addnstr(row, 0, line, width - 1, attrs)
+        base_line, suffix_line = _fit_row_segments(line, agent_suffix, width - 1)
+        stdscr.addnstr(row, 0, base_line, width - 1, attrs)
+        if suffix_line and len(base_line) < width - 1:
+            stdscr.addnstr(
+                row,
+                len(base_line),
+                suffix_line,
+                width - 1 - len(base_line),
+                attrs,
+            )
 
     if state.prompt_active:
         prompt = f"{state.prompt_label}{state.prompt_buffer}"
@@ -207,17 +256,50 @@ def _format_session_row(
     is_marked: bool,
     is_visual: bool,
     attached: bool,
-) -> tuple[str, int]:
+    agent_total: int = 0,
+    agent_working: int = 0,
+    agent_idle: int = 0,
+    animation_step: int = 0,
+) -> tuple[str, str, int]:
     cursor = ">" if is_current else " "
     mark = "*" if is_marked else " "
     visual = "+" if is_visual else " "
     attached_suffix = " (attached)" if attached else ""
+    agent_suffix = ""
+    if agent_working:
+        agent_suffix = _agent_working_frame(animation_step)
     line = f"{cursor}{mark}{visual} {session_name}{attached_suffix}"
 
     attrs = curses.A_BOLD if is_current else curses.A_NORMAL
     if is_visual:
         attrs |= curses.A_REVERSE
-    return line, attrs
+    return line, agent_suffix, attrs
+
+
+def _agent_working_frame(animation_step: int) -> str:
+    return AGENT_WORKING_FRAMES[animation_step % len(AGENT_WORKING_FRAMES)]
+
+
+def _fit_row_segments(base_line: str, agent_suffix: str, width: int) -> tuple[str, str]:
+    if width <= 0:
+        return "", ""
+    if not agent_suffix:
+        return _truncate_text(base_line, width), ""
+
+    suffix_line = agent_suffix[:width]
+    if len(suffix_line) >= width:
+        return "", suffix_line
+    return _truncate_text(base_line, width - len(suffix_line)), suffix_line
+
+
+def _truncate_text(text: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    if len(text) <= width:
+        return text
+    if width <= 3:
+        return text[:width]
+    return f"{text[: width - 3]}..."
 
 
 def _refresh_sessions(
@@ -225,6 +307,11 @@ def _refresh_sessions(
 ) -> None:
     ensure_index_session(api)
     state.sync_sessions(_visible_sessions(api.list_sessions()), preferred=preferred)
+    _refresh_agent_statuses(api, state)
+
+
+def _refresh_agent_statuses(api: TmuxAPI, state: SessionBrowserState) -> None:
+    state.sync_agent_statuses(api.list_session_agent_statuses())
 
 
 def _visible_sessions(sessions: list[Session]) -> list[Session]:
@@ -343,7 +430,8 @@ def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None
 
 def browse_sessions(api: TmuxAPI, persistent: bool = False) -> int:
     ensure_index_session(api)
-    state = SessionBrowserState(sessions=_visible_sessions(api.list_sessions()))
+    state = SessionBrowserState(sessions=[])
+    _refresh_sessions(api, state)
 
     def _run(stdscr: curses.window) -> int:
         _setup_curses(stdscr)
@@ -355,6 +443,14 @@ def browse_sessions(api: TmuxAPI, persistent: bool = False) -> int:
 
             _draw_sessions(stdscr, state)
             key = stdscr.getch()
+            if key == -1:
+                state.animation_step = (state.animation_step + 1) % 3
+                state.agent_refresh_tick = (
+                    state.agent_refresh_tick + 1
+                ) % AGENT_STATUS_REFRESH_TICKS
+                if state.agent_refresh_tick == 0:
+                    _refresh_agent_statuses(api, state)
+                continue
 
             if state.prompt_active:
                 action, value = _handle_prompt_key(state, key)
