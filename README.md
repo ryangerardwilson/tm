@@ -21,12 +21,12 @@ Installer shortcuts:
 - `./install.sh -v`: print the latest release version
 - `./install.sh -v 0.1.0`: install a specific release
 - `./install.sh -u`: upgrade to the latest release if newer
-- `./install.sh --tmux-key Insert -u`: keep the tmux index shortcut but bind it to plain `Insert`
+- `./install.sh --tmux-key F8 -u`: override the tmux index shortcut if you want a different key
 
 The installer manages a small tmux snippet at `~/.tmux/tm.conf` and ensures `~/.tmux.conf`
 sources it, so the index-session shortcut is repo-managed instead of hand-maintained.
-The default shortcut key is `C-Insert`; plain `Insert` is possible if your terminal sends it
-cleanly.
+The default shortcut key is `C-Insert`. You can still override it with `--tmux-key <key>` if you
+want a different tmux key name.
 
 ## Usage
 

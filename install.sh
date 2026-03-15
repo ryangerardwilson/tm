@@ -40,6 +40,11 @@ no_modify_path=false
 show_latest=false
 upgrade=false
 tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}
+previous_tmux_index_key=""
+
+if [[ -f "$TMUX_SNIPPET_FILE" ]]; then
+  previous_tmux_index_key=$(sed -n 's/^bind -n \(.*\) switch-client -t index$/\1/p' "$TMUX_SNIPPET_FILE" | tail -n 1)
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -186,11 +191,20 @@ chmod 755 "$INSTALL_DIR/$APP"
 
 write_tmux_snippet() {
   mkdir -p "$TMUX_SNIPPET_DIR"
-  cat > "$TMUX_SNIPPET_FILE" <<EOF
-# Managed by tm install.sh
-unbind -n ${tmux_index_key}
-bind -n ${tmux_index_key} switch-client -t index
-EOF
+  {
+    echo "# Managed by tm install.sh"
+    declare -A seen=()
+    local key
+    for key in "$tmux_index_key" "$previous_tmux_index_key" "C-Insert" "Insert" "F8" "F9" "F12"; do
+      [[ -n "$key" ]] || continue
+      if [[ -n "${seen[$key]:-}" ]]; then
+        continue
+      fi
+      seen["$key"]=1
+      printf 'unbind -n %s\n' "$key"
+    done
+    printf 'bind -n %s switch-client -t index\n' "$tmux_index_key"
+  } > "$TMUX_SNIPPET_FILE"
 }
 
 ensure_tmux_config_sources_snippet() {

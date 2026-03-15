@@ -17,7 +17,9 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert '--tmux-key <key>' in script
     assert 'tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}' in script
     assert 'TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"' in script
-    assert 'bind -n ${tmux_index_key} switch-client -t index' in script
+    assert "printf 'bind -n %s switch-client -t index\\n' \"$tmux_index_key\"" in script
+    assert 'previous_tmux_index_key=' in script
+    assert 'for key in "$tmux_index_key" "$previous_tmux_index_key" "C-Insert" "Insert" "F8" "F9" "F12"; do' in script
     assert 'source-file $TMUX_SNIPPET_FILE' in script
 
 
