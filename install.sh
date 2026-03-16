@@ -144,13 +144,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "$tmux_index_key" in
-  M-d|M-h|M--)
-    die "--tmux-key ${tmux_index_key} conflicts with reserved tmux root bindings (M-d, M-h, M--, M-\\)"
-    ;;
-esac
-if [[ "$tmux_index_key" == "M-\\" ]]; then
-  die "--tmux-key ${tmux_index_key} conflicts with reserved tmux root bindings (M-d, M-h, M--, M-\\)"
+if [[ "$tmux_index_key" == "M-d" || "$tmux_index_key" == "M-h" || "$tmux_index_key" == "M-|" || "$tmux_index_key" == "M-\\" ]]; then
+  die "--tmux-key ${tmux_index_key} conflicts with reserved tmux root bindings (M-d, M-h, M-|, M-\\)"
 fi
 
 if $show_latest; then
@@ -237,6 +232,7 @@ write_tmux_snippet() {
   mkdir -p "$TMUX_SNIPPET_DIR"
   {
     echo "# Managed by tm install.sh"
+    echo "unbind -n 'M-|'"
     echo "unbind -n 'M-\\'"
     declare -A seen=()
     local key
@@ -250,8 +246,8 @@ write_tmux_snippet() {
     done
     printf 'bind -n %s switch-client -t index\n' "$tmux_index_key"
     echo 'bind -n M-h select-pane -L'
-    echo "bind -n 'M-\\' split-window -h"
-    echo 'bind -n M-- split-window -v'
+    echo "bind -n 'M-|' split-window -h"
+    echo "bind -n 'M-\\' split-window -v"
     echo 'bind -n M-d kill-pane'
   } > "$TMUX_SNIPPET_FILE"
 }
