@@ -237,7 +237,7 @@ write_tmux_snippet() {
   mkdir -p "$TMUX_SNIPPET_DIR"
   {
     echo "# Managed by tm install.sh"
-    echo "unbind -n 'M-\\\\'"
+    echo "unbind -n 'M-\\'"
     declare -A seen=()
     local key
     for key in "$tmux_index_key" "$previous_tmux_index_key" "M--" "M-d" "M-h" "M-i" "M-v" "C-i" "Tab" "C-DC" "C-Home" "C-End" "C-Insert" "Insert" "F8" "F9" "F12"; do
@@ -250,7 +250,7 @@ write_tmux_snippet() {
     done
     printf 'bind -n %s switch-client -t index\n' "$tmux_index_key"
     echo 'bind -n M-h select-pane -L'
-    echo "bind -n 'M-\\\\' split-window -h"
+    echo "bind -n 'M-\\' split-window -h"
     echo 'bind -n M-- split-window -v'
     echo 'bind -n M-d kill-pane'
   } > "$TMUX_SNIPPET_FILE"
