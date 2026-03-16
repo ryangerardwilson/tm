@@ -15,6 +15,8 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert 'previous_tmux_index_key=' in script
     assert 'for key in "$tmux_index_key" "$previous_tmux_index_key" "M-i" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do' in script
     assert 'source-file $TMUX_SNIPPET_FILE' in script
+    assert 'tmux ls >/dev/null 2>&1' in script
+    assert 'tmux source-file "$TMUX_SNIPPET_FILE" >/dev/null 2>&1 || true' in script
 
 
 def test_release_workflow_stamps_version_and_publishes_bundle() -> None:

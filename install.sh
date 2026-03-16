@@ -283,6 +283,14 @@ PY
 write_tmux_snippet
 ensure_tmux_config_sources_snippet
 
+reload_running_tmux_snippet() {
+  if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then
+    tmux source-file "$TMUX_SNIPPET_FILE" >/dev/null 2>&1 || true
+  fi
+}
+
+reload_running_tmux_snippet
+
 add_to_path() {
   local config_file=$1
   local command=$2
