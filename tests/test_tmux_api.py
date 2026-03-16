@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shlex
+from pathlib import Path
+
 import tmux_api
 from tmux_api import (
     AgentStatus,
@@ -39,6 +42,12 @@ class FakeAPI(TmuxAPI):
 
 
 LIST_SESSIONS_FORMAT = "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_last_attached}"
+
+
+def test_index_browser_command_uses_active_interpreter(monkeypatch) -> None:
+    monkeypatch.setattr(tmux_api.sys, "executable", "/tmp/venv/bin/python")
+    entrypoint = Path(tmux_api.__file__).resolve().with_name("main.py")
+    assert tmux_api.index_browser_command() == f"{shlex.quote('/tmp/venv/bin/python')} {shlex.quote(str(entrypoint))} p"
 
 
 def test_attach_or_create_outside_tmux_attaches_existing() -> None:

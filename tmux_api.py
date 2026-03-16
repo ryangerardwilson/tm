@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -417,7 +419,10 @@ def ensure_session_exists(api: TmuxAPI, session_name: str, detached: bool = True
 
 def index_browser_command() -> str:
     entrypoint = Path(__file__).resolve().with_name("main.py")
-    return f"/usr/bin/env python3 {entrypoint} p"
+    if sys.executable:
+        interpreter = shlex.quote(sys.executable)
+        return f"{interpreter} {shlex.quote(str(entrypoint))} p"
+    return f"/usr/bin/env python3 {shlex.quote(str(entrypoint))} p"
 
 
 def ensure_index_session(api: TmuxAPI) -> bool:

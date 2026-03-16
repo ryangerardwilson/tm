@@ -27,7 +27,7 @@ Options:
   -u                         Upgrade to the latest release only when newer
   -b <path>                  Install from a local checkout or source bundle
   -n                         Do not modify shell config to add to PATH
-      --tmux-key <key>       Bind the index-session shortcut in tmux (default: C-Insert)
+      --tmux-key <key>       Bind the index-session shortcut in tmux (default: M-i)
 
       --help                 Compatibility alias for -h
       --version [<version>]  Compatibility alias for -v
@@ -96,7 +96,7 @@ get_latest_version() {
 
 TMUX_SNIPPET_DIR="$HOME/.tmux"
 TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"
-tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}
+tmux_index_key=${TMUX_INDEX_KEY:-M-i}
 previous_tmux_index_key=""
 
 if [[ -f "$TMUX_SNIPPET_FILE" ]]; then
@@ -230,7 +230,7 @@ write_tmux_snippet() {
     echo "# Managed by tm install.sh"
     declare -A seen=()
     local key
-    for key in "$tmux_index_key" "$previous_tmux_index_key" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do
+    for key in "$tmux_index_key" "$previous_tmux_index_key" "M-i" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do
       [[ -n "$key" ]] || continue
       if [[ -n "${seen[$key]:-}" ]]; then
         continue
