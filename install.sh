@@ -145,10 +145,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$tmux_index_key" in
-  M-d|M-h|M-v)
-    die "--tmux-key ${tmux_index_key} conflicts with reserved tmux root bindings (M-d, M-h, M-v)"
+  M-d|M-h|M--)
+    die "--tmux-key ${tmux_index_key} conflicts with reserved tmux root bindings (M-d, M-h, M--, M-\\)"
     ;;
 esac
+if [[ "$tmux_index_key" == "M-\\" ]]; then
+  die "--tmux-key ${tmux_index_key} conflicts with reserved tmux root bindings (M-d, M-h, M--, M-\\)"
+fi
 
 if $show_latest; then
   [[ "$upgrade" == false && -z "$binary_path" && -z "$requested_version" ]] || \
@@ -234,9 +237,10 @@ write_tmux_snippet() {
   mkdir -p "$TMUX_SNIPPET_DIR"
   {
     echo "# Managed by tm install.sh"
+    echo "unbind -n 'M-\\\\'"
     declare -A seen=()
     local key
-    for key in "$tmux_index_key" "$previous_tmux_index_key" "M-d" "M-h" "M-i" "M-v" "C-i" "Tab" "C-DC" "C-Home" "C-End" "C-Insert" "Insert" "F8" "F9" "F12"; do
+    for key in "$tmux_index_key" "$previous_tmux_index_key" "M--" "M-d" "M-h" "M-i" "M-v" "C-i" "Tab" "C-DC" "C-Home" "C-End" "C-Insert" "Insert" "F8" "F9" "F12"; do
       [[ -n "$key" ]] || continue
       if [[ -n "${seen[$key]:-}" ]]; then
         continue
@@ -245,8 +249,9 @@ write_tmux_snippet() {
       printf 'unbind -n %s\n' "$key"
     done
     printf 'bind -n %s switch-client -t index\n' "$tmux_index_key"
-    echo 'bind -n M-h split-window -h'
-    echo 'bind -n M-v split-window -v'
+    echo 'bind -n M-h select-pane -L'
+    echo "bind -n 'M-\\\\' split-window -h"
+    echo 'bind -n M-- split-window -v'
     echo 'bind -n M-d kill-pane'
   } > "$TMUX_SNIPPET_FILE"
 }

@@ -27,9 +27,9 @@ The installer manages a small tmux snippet at `~/.tmux/tm.conf` and ensures `~/.
 sources it, so the index-session shortcut is repo-managed instead of hand-maintained.
 The default shortcut key is `M-i`. You can still override it with `--tmux-key <key>` if you
 want a different tmux key name.
-The managed root tmux bindings are `M-h` for horizontal split, `M-v` for vertical split,
-and `M-d` for kill pane. The snippet removes the old `C-Home`, `C-End`, and `C-DC`
-root bindings when it is sourced.
+The managed root tmux bindings are `M-h` for left-pane navigation, `M-\\` for horizontal split,
+`M--` for vertical split, and `M-d` for kill pane. The snippet removes the old conflicting
+`M-h`, `M-v`, `C-Home`, `C-End`, and `C-DC` root bindings when it is sourced.
 
 ## Usage
 
