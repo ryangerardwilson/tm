@@ -20,8 +20,6 @@ except ModuleNotFoundError:
     sys.path.insert(0, str(contract_src))
     from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
 
-ANSI_GRAY = "\033[38;5;245m"
-ANSI_RESET = "\033[0m"
 APP_DIR = Path(__file__).resolve().parent
 INSTALL_SCRIPT = resolve_install_script_path(__file__)
 HELP_TEXT = """tm
