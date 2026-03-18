@@ -26,7 +26,7 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert "declare -A seen=()" in script
     assert '"M-h" \\' in script
     assert '"M-|" \\' in script
-    assert '"M-\\\\" \\' in script
+    assert '"M-\\\\\\\\" \\' in script
     assert '"M-d" \\' in script
     assert '"M--" \\' in script
     assert '"M-v" \\' in script
@@ -36,7 +36,7 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert 'printf \'unbind -n "%s"\\n\' "$key"' in script
     assert 'printf \'bind -n "%s" select-pane -L\\n\' "M-h"' in script
     assert 'printf \'bind -n "%s" split-window -h -c "#{pane_current_path}"\\n\' "M-|"' in script
-    assert 'printf \'bind -n "%s" split-window -v -c "#{pane_current_path}"\\n\' "M-\\\\"' in script
+    assert 'printf \'bind -n "%s" split-window -v -c "#{pane_current_path}"\\n\' "M-\\\\\\\\"' in script
     assert 'printf \'bind -n "%s" kill-pane\\n\' "M-d"' in script
     assert 'source-file $TMUX_SNIPPET_FILE' in script
     assert 'exec "${VENV_DIR}/bin/python" "${SOURCE_DIR}/main.py" "\\$@"' in script
