@@ -292,13 +292,16 @@ class TmuxAPI:
         codex_pid = self.pane_codex_process_pid(pane, processes, children_by_pid)
         if codex_pid is None:
             return None
-        proc = subprocess.run(
-            ["lsof", "-p", str(codex_pid)],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=self.env,
-        )
+        try:
+            proc = subprocess.run(
+                ["lsof", "-p", str(codex_pid)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=self.env,
+            )
+        except FileNotFoundError:
+            return None
         if proc.returncode != 0:
             return None
         return _rollout_thread_id_from_lsof_output(proc.stdout)

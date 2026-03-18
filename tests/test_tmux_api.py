@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+import subprocess
 from pathlib import Path
 
 import tmux_api
@@ -321,6 +322,22 @@ def test_rollout_thread_id_parser_extracts_codex_thread_id() -> None:
         "rollout-2026-03-15T11-55-31-019cf02b-d991-7221-a544-abaa9bbfa2f3.jsonl\n"
     )
     assert _rollout_thread_id_from_lsof_output(output) == "019cf02b-d991-7221-a544-abaa9bbfa2f3"
+
+
+def test_pane_codex_thread_id_returns_none_when_lsof_is_missing(monkeypatch) -> None:
+    api = TmuxAPI()
+    pane = tmux_api.Pane("work", "%1", 100, "node")
+    processes = {
+        100: ProcessInfo(100, 1, "node-MainThread", "node /home/ryan/.npm-global/bin/codex"),
+        101: ProcessInfo(101, 100, "codex", "/vendor/codex/codex"),
+    }
+    children_by_pid = {1: [100], 100: [101]}
+
+    def raise_missing_lsof(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise FileNotFoundError("lsof")
+
+    monkeypatch.setattr(subprocess, "run", raise_missing_lsof)
+    assert api.pane_codex_thread_id(pane, processes=processes, children_by_pid=children_by_pid) is None
 
 
 def test_kill_session_safely_moves_clients_then_kills() -> None:
