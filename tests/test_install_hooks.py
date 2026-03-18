@@ -20,10 +20,24 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert 'client_tty = "#{client_tty}"' in script
     assert "current_action = f'run-shell \"{shlex.quote(app_bin)} >/dev/null 2>&1\"'" in script
     assert 'client_tty_action = f\'run-shell "TMUX_CLIENT_TTY={shlex.quote("#{client_tty}")} {shlex.quote(app_bin)} >/dev/null 2>&1"\'' in script
-    assert 'printf \'bind -n %s run-shell "%s"\\n\' "$tmux_index_key" "$tmux_index_run_shell_command"' in script
+    assert 'key = key.strip(\'"\')' in script
+    assert 'printf \'bind -n "%s" run-shell "%s"\\n\' "$tmux_index_key" "$tmux_index_run_shell_command"' in script
     assert 'previous_tmux_index_key=' in script
     assert "declare -A seen=()" in script
-    assert 'for key in "$tmux_index_key" "$previous_tmux_index_key" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do' in script
+    assert '"M-h" \\' in script
+    assert '"M-|" \\' in script
+    assert '"M-\\\\" \\' in script
+    assert '"M-d" \\' in script
+    assert '"M--" \\' in script
+    assert '"M-v" \\' in script
+    assert '"M-Home" \\' in script
+    assert '"M-End" \\' in script
+    assert '"M-DC"; do' in script
+    assert 'printf \'unbind -n "%s"\\n\' "$key"' in script
+    assert 'printf \'bind -n "%s" select-pane -L\\n\' "M-h"' in script
+    assert 'printf \'bind -n "%s" split-window -h -c "#{pane_current_path}"\\n\' "M-|"' in script
+    assert 'printf \'bind -n "%s" split-window -v -c "#{pane_current_path}"\\n\' "M-\\\\"' in script
+    assert 'printf \'bind -n "%s" kill-pane\\n\' "M-d"' in script
     assert 'source-file $TMUX_SNIPPET_FILE' in script
     assert 'exec "${VENV_DIR}/bin/python" "${SOURCE_DIR}/main.py" "\\$@"' in script
     assert 'python3 -m venv "$VENV_DIR"' not in script

@@ -146,6 +146,7 @@ for raw_line in reversed(snippet_path.read_text(encoding="utf-8").splitlines()):
         key, action = line[len("bind -n ") :].split(" ", 1)
     except ValueError:
         continue
+    key = key.strip('"')
     if action in {legacy_action, current_action, client_tty_action}:
         print(key)
         break
@@ -280,15 +281,37 @@ write_tmux_snippet() {
     echo "# Managed by tm install.sh"
     declare -A seen=()
     local key
-    for key in "$tmux_index_key" "$previous_tmux_index_key" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do
+    for key in \
+      "$tmux_index_key" \
+      "$previous_tmux_index_key" \
+      "C-i" \
+      "Tab" \
+      "C-Insert" \
+      "Insert" \
+      "F8" \
+      "F9" \
+      "F12" \
+      "M-h" \
+      "M-|" \
+      "M-\\\\" \
+      "M-d" \
+      "M--" \
+      "M-v" \
+      "M-Home" \
+      "M-End" \
+      "M-DC"; do
       [[ -n "$key" ]] || continue
       if [[ -n "${seen[$key]:-}" ]]; then
         continue
       fi
       seen["$key"]=1
-      printf 'unbind -n %s\n' "$key"
+      printf 'unbind -n "%s"\n' "$key"
     done
-    printf 'bind -n %s run-shell "%s"\n' "$tmux_index_key" "$tmux_index_run_shell_command"
+    printf 'bind -n "%s" run-shell "%s"\n' "$tmux_index_key" "$tmux_index_run_shell_command"
+    printf 'bind -n "%s" select-pane -L\n' "M-h"
+    printf 'bind -n "%s" split-window -h -c "#{pane_current_path}"\n' "M-|"
+    printf 'bind -n "%s" split-window -v -c "#{pane_current_path}"\n' "M-\\\\"
+    printf 'bind -n "%s" kill-pane\n' "M-d"
   } > "$TMUX_SNIPPET_FILE"
 }
 
