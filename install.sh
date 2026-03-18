@@ -89,11 +89,45 @@ get_latest_version() {
 
 TMUX_SNIPPET_DIR="$HOME/.tmux"
 TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"
+TMUX_APP_BIN="$INSTALL_DIR/$APP"
 tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}
 previous_tmux_index_key=""
+tmux_index_run_shell_command="$(
+  python3 - "$TMUX_APP_BIN" <<'PY'
+import shlex
+import sys
+
+print(f"{shlex.quote(sys.argv[1])} >/dev/null 2>&1")
+PY
+)"
+
+detect_previous_tmux_index_key() {
+  python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import shlex
+import sys
+
+snippet_path = Path(sys.argv[1])
+app_bin = sys.argv[2]
+legacy_action = "switch-client -t index"
+current_action = f'run-shell "{shlex.quote(app_bin)} >/dev/null 2>&1"'
+
+for raw_line in reversed(snippet_path.read_text(encoding="utf-8").splitlines()):
+    line = raw_line.strip()
+    if not line.startswith("bind -n "):
+        continue
+    try:
+        key, action = line[len("bind -n ") :].split(" ", 1)
+    except ValueError:
+        continue
+    if action in {legacy_action, current_action}:
+        print(key)
+        break
+PY
+}
 
 if [[ -f "$TMUX_SNIPPET_FILE" ]]; then
-  previous_tmux_index_key=$(sed -n 's/^bind -n \(.*\) switch-client -t index$/\1/p' "$TMUX_SNIPPET_FILE" | tail -n 1)
+  previous_tmux_index_key="$(detect_previous_tmux_index_key "$TMUX_SNIPPET_FILE" "$TMUX_APP_BIN")"
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -231,7 +265,7 @@ write_tmux_snippet() {
       seen["$key"]=1
       printf 'unbind -n %s\n' "$key"
     done
-    printf 'bind -n %s switch-client -t index\n' "$tmux_index_key"
+    printf 'bind -n %s run-shell "%s"\n' "$tmux_index_key" "$tmux_index_run_shell_command"
   } > "$TMUX_SNIPPET_FILE"
 }
 

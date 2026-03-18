@@ -11,7 +11,11 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert "--tmux-key <key>" in script
     assert 'tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}' in script
     assert 'TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"' in script
-    assert "printf 'bind -n %s switch-client -t index\\n' \"$tmux_index_key\"" in script
+    assert 'TMUX_APP_BIN="$INSTALL_DIR/$APP"' in script
+    assert 'detect_previous_tmux_index_key() {' in script
+    assert 'legacy_action = "switch-client -t index"' in script
+    assert "current_action = f'run-shell \"{shlex.quote(app_bin)} >/dev/null 2>&1\"'" in script
+    assert 'printf \'bind -n %s run-shell "%s"\\n\' "$tmux_index_key" "$tmux_index_run_shell_command"' in script
     assert 'previous_tmux_index_key=' in script
     assert "declare -A seen=()" in script
     assert 'for key in "$tmux_index_key" "$previous_tmux_index_key" "C-i" "Tab" "C-Insert" "Insert" "F8" "F9" "F12"; do' in script

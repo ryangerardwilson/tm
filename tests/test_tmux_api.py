@@ -96,6 +96,34 @@ def test_attach_or_create_outside_tmux_creates_in_home_directory() -> None:
     ]
 
 
+def test_attach_or_create_index_ensures_managed_session_first(monkeypatch) -> None:
+    ensured: list[object] = []
+
+    class IndexAPI(FakeAPI):
+        def has_session(self, name: str) -> bool:
+            self.calls.append(("has-session", "-t", name))
+            return True
+
+    api = IndexAPI(
+        {
+            ("switch-client", "-t", "index"): FakeProc(returncode=0),
+        },
+        env={"TMUX": "/tmp/socket,1,0"},
+    )
+
+    def fake_ensure_index(active_api):  # type: ignore[no-untyped-def]
+        ensured.append(active_api)
+        return False
+
+    monkeypatch.setattr(tmux_api, "ensure_index_session", fake_ensure_index)
+    assert attach_or_create_session(api, "index") == 0
+    assert ensured == [api]
+    assert api.calls == [
+        ("has-session", "-t", "index"),
+        ("switch-client", "-t", "index"),
+    ]
+
+
 def test_ensure_index_session_creates_missing_index() -> None:
     browser_command = index_browser_command()
     api = FakeAPI(

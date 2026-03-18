@@ -25,6 +25,7 @@ Installer shortcuts:
 
 The installer manages a small tmux snippet at `~/.tmux/tm.conf` and ensures `~/.tmux.conf`
 sources it, so the index-session shortcut is repo-managed instead of hand-maintained.
+That shortcut runs the installed `tm` command, so the managed `index` session is recreated first if it is missing.
 The default shortcut key is `M-i`. You can still override it with `--tmux-key <key>` if you
 want a different tmux key name.
 The managed root tmux bindings are `M-h` for left-pane navigation, `M-|` for horizontal split,

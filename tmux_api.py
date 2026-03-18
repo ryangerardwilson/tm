@@ -463,6 +463,8 @@ def ensure_index_session(api: TmuxAPI) -> bool:
 
 
 def attach_or_create_session(api: TmuxAPI, session_name: str) -> int:
+    if session_name == INDEX_SESSION_NAME:
+        ensure_index_session(api)
     inside_tmux = bool(api.env.get("TMUX"))
     if api.has_session(session_name):
         if inside_tmux:
