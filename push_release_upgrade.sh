@@ -111,33 +111,22 @@ wait_for_release() {
 }
 
 run_local_tests() {
-  local test_venv=""
-  local python_cmd="python3"
-  local pip_cmd=()
   local rc=0
 
-  if [[ -d "tests" || -n "$(compgen -G 'test_*.py' || true)" || -n "$(compgen -G '*_test.py' || true)" ]]; then
-    test_venv="$(mktemp -d "${TMPDIR:-/tmp}/${APP}_release_test_XXXXXX")"
-    python3 -m venv "$test_venv"
-    pip_cmd=("$test_venv/bin/pip" "install" "--disable-pip-version-check")
-    if [[ -s "requirements.txt" ]]; then
-      pip_cmd+=("-r" "requirements.txt")
+  python3 -m py_compile main.py session_tui.py snapshot_state.py tmux_api.py rgw_cli_contract/*.py || rc=$?
+
+  if [[ -f "tests/test_install_contract.py" ]]; then
+    python3 tests/test_install_contract.py || rc=$?
+  fi
+
+  if python3 -m pytest --version >/dev/null 2>&1; then
+    if [[ -d "tests" ]]; then
+      python3 -m pytest tests || rc=$?
+    elif compgen -G 'test_*.py' >/dev/null || compgen -G '*_test.py' >/dev/null; then
+      python3 -m pytest || rc=$?
     fi
-    pip_cmd+=("pytest")
-    "${pip_cmd[@]}"
-    python_cmd="$test_venv/bin/python"
-  fi
-
-  if [[ -d "tests" ]]; then
-    "$python_cmd" -m pytest tests || rc=$?
-  elif compgen -G 'test_*.py' >/dev/null || compgen -G '*_test.py' >/dev/null; then
-    "$python_cmd" -m pytest || rc=$?
   else
-    info "No local test targets found; skipping local tests."
-  fi
-
-  if [[ -n "$test_venv" ]]; then
-    rm -rf "$test_venv"
+    info "pytest is not available locally; skipping pytest-only coverage."
   fi
 
   return "$rc"

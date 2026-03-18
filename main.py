@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from _version import __version__
+from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
 from snapshot_state import SnapshotError, restore_saved_sessions_if_needed
 from session_tui import browse_sessions
 from tmux_api import INDEX_SESSION_NAME, TmuxAPI, TmuxError, attach_or_create_session, ensure_index_session
-
-try:
-    from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
-except ModuleNotFoundError:
-    contract_src = Path(__file__).resolve().parents[1] / "rgw_cli_contract" / "src"
-    if not contract_src.exists():
-        raise
-    sys.path.insert(0, str(contract_src))
-    from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
 
 APP_DIR = Path(__file__).resolve().parent
 INSTALL_SCRIPT = resolve_install_script_path(__file__)

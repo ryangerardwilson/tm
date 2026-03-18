@@ -124,6 +124,21 @@ def test_attach_or_create_index_ensures_managed_session_first(monkeypatch) -> No
     ]
 
 
+def test_attach_or_create_inside_tmux_uses_explicit_client_tty_when_available() -> None:
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "work"): FakeProc(returncode=0),
+            ("switch-client", "-c", "/dev/pts/0", "-t", "work"): FakeProc(returncode=0),
+        },
+        env={"TMUX": "/tmp/socket,1,0", "TMUX_CLIENT_TTY": "/dev/pts/0"},
+    )
+    assert attach_or_create_session(api, "work") == 0
+    assert api.calls == [
+        ("has-session", "-t", "work"),
+        ("switch-client", "-c", "/dev/pts/0", "-t", "work"),
+    ]
+
+
 def test_ensure_index_session_creates_missing_index() -> None:
     browser_command = index_browser_command()
     api = FakeAPI(

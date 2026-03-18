@@ -50,6 +50,30 @@ die() {
   exit 1
 }
 
+create_venv() {
+  local venv_log="$tmp_dir/venv-create.log"
+
+  rm -rf "$VENV_DIR"
+  if "$PYTHON_BIN" -m venv --without-pip "$VENV_DIR" >"$venv_log" 2>&1; then
+    return 0
+  fi
+
+  rm -rf "$VENV_DIR"
+  if command -v virtualenv >/dev/null 2>&1; then
+    if virtualenv --python "$PYTHON_BIN" --without-pip "$VENV_DIR" >"$venv_log" 2>&1; then
+      return 0
+    fi
+  fi
+
+  if [[ -s "$venv_log" ]]; then
+    cat "$venv_log" >&2
+  fi
+  if command -v virtualenv >/dev/null 2>&1; then
+    die "Unable to create virtual environment with python3 -m venv or virtualenv."
+  fi
+  die "Unable to create virtual environment with python3 -m venv. Install python3-venv or virtualenv."
+}
+
 extract_source() {
   local src_path="$1"
   local out_dir="$2"
@@ -97,7 +121,8 @@ tmux_index_run_shell_command="$(
 import shlex
 import sys
 
-print(f"{shlex.quote(sys.argv[1])} >/dev/null 2>&1")
+client_tty = "#{client_tty}"
+print(f"TMUX_CLIENT_TTY={shlex.quote(client_tty)} {shlex.quote(sys.argv[1])} >/dev/null 2>&1")
 PY
 )"
 
@@ -111,6 +136,7 @@ snippet_path = Path(sys.argv[1])
 app_bin = sys.argv[2]
 legacy_action = "switch-client -t index"
 current_action = f'run-shell "{shlex.quote(app_bin)} >/dev/null 2>&1"'
+client_tty_action = f'run-shell "TMUX_CLIENT_TTY={shlex.quote("#{client_tty}")} {shlex.quote(app_bin)} >/dev/null 2>&1"'
 
 for raw_line in reversed(snippet_path.read_text(encoding="utf-8").splitlines()):
     line = raw_line.strip()
@@ -120,7 +146,7 @@ for raw_line in reversed(snippet_path.read_text(encoding="utf-8").splitlines()):
         key, action = line[len("bind -n ") :].split(" ", 1)
     except ValueError:
         continue
-    if action in {legacy_action, current_action}:
+    if action in {legacy_action, current_action, client_tty_action}:
         print(key)
         break
 PY
@@ -193,6 +219,7 @@ if $upgrade; then
 fi
 
 command -v python3 >/dev/null 2>&1 || { print_message error "'python3' is required but not installed."; exit 1; }
+PYTHON_BIN="$(command -v python3)"
 mkdir -p "$INSTALL_DIR" "$APP_DIR"
 tmp_dir="${TMPDIR:-/tmp}/${APP}_install_$$"
 rm -rf "$tmp_dir"
@@ -238,11 +265,7 @@ fi
 [[ -f "${SOURCE_DIR}/main.py" ]] || die "Source bundle missing main.py"
 [[ -f "${SOURCE_DIR}/_version.py" ]] || die "Source bundle missing _version.py"
 
-python3 -m venv "$VENV_DIR"
-"$VENV_DIR/bin/pip" install --disable-pip-version-check -U pip >/dev/null
-if [[ -f "${SOURCE_DIR}/requirements.txt" ]]; then
-  "$VENV_DIR/bin/pip" install --disable-pip-version-check -r "${SOURCE_DIR}/requirements.txt" >/dev/null
-fi
+create_venv
 
 cat > "${INSTALL_DIR}/${APP}" <<EOF
 #!/usr/bin/env bash

@@ -8,6 +8,7 @@ import unittest
 INSTALLER = Path(__file__).resolve().parent / "install.sh"
 if not INSTALLER.exists():
     INSTALLER = Path(__file__).resolve().parents[1] / "install.sh"
+ROOT = INSTALLER.resolve().parent
 
 
 class InstallContractTests(unittest.TestCase):
@@ -90,6 +91,34 @@ class InstallContractTests(unittest.TestCase):
             )
 
             self.assertIn("already installed", result.stdout)
+
+    def test_local_source_install_writes_venv_launcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            home_dir.mkdir()
+
+            env = os.environ.copy()
+            env["HOME"] = str(home_dir)
+
+            subprocess.run(
+                ["/usr/bin/bash", str(INSTALLER), "-b", str(ROOT), "-n"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=True,
+            )
+
+            launcher_path = home_dir / ".tm" / "bin" / "tm"
+            venv_python = home_dir / ".tm" / "venv" / "bin" / "python"
+            source_main = home_dir / ".tm" / "app" / "source" / "main.py"
+
+            self.assertTrue(launcher_path.exists())
+            self.assertTrue(venv_python.exists())
+            launcher = launcher_path.read_text(encoding="utf-8")
+            self.assertIn(str(venv_python), launcher)
+            self.assertIn(str(source_main), launcher)
+            self.assertNotIn("python3", launcher)
 
 
 if __name__ == "__main__":

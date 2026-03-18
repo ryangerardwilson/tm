@@ -110,6 +110,10 @@ class TmuxAPI:
     def default_start_directory(self) -> str:
         return self.env.get("HOME") or str(Path.home())
 
+    def current_client_tty(self) -> str | None:
+        client_tty = (self.env.get("TMUX_CLIENT_TTY") or "").strip()
+        return client_tty or None
+
     def _run(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
         proc = subprocess.run(
             ["tmux", *args],
@@ -466,9 +470,10 @@ def attach_or_create_session(api: TmuxAPI, session_name: str) -> int:
     if session_name == INDEX_SESSION_NAME:
         ensure_index_session(api)
     inside_tmux = bool(api.env.get("TMUX"))
+    client_tty = api.current_client_tty()
     if api.has_session(session_name):
         if inside_tmux:
-            api.switch_client(session_name)
+            api.switch_client(session_name, client_tty=client_tty)
             return 0
         return api.attach_session(session_name)
 
@@ -476,7 +481,7 @@ def attach_or_create_session(api: TmuxAPI, session_name: str) -> int:
         create_rc = api.new_session(session_name, detached=True)
         if create_rc != 0:
             return create_rc
-        api.switch_client(session_name)
+        api.switch_client(session_name, client_tty=client_tty)
         return 0
     return api.new_session(session_name, detached=False)
 
