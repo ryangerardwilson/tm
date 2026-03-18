@@ -493,6 +493,8 @@ def kill_sessions_safely(api: TmuxAPI, session_names: list[str]) -> str:
         targets.append(name)
     if not targets:
         raise TmuxError("No sessions selected")
+    if INDEX_SESSION_NAME in seen:
+        raise TmuxError(f"Cannot kill managed session: {INDEX_SESSION_NAME}")
     for name in targets:
         if not api.has_session(name):
             raise TmuxError(f"No such session: {name}")

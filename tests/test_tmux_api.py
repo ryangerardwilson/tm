@@ -336,6 +336,17 @@ def test_kill_sessions_safely_uses_non_target_fallback_for_multiple_targets() ->
     ]
 
 
+def test_kill_sessions_safely_rejects_managed_index_session() -> None:
+    api = FakeAPI({})
+    try:
+        kill_sessions_safely(api, ["index"])
+    except tmux_api.TmuxError as exc:
+        assert str(exc) == "Cannot kill managed session: index"
+    else:
+        raise AssertionError("TmuxError not raised")
+    assert api.calls == []
+
+
 def test_kill_session_safely_creates_temp_fallback_in_home_directory(monkeypatch) -> None:
     monkeypatch.setattr(tmux_api.time, "time", lambda: 123)
     api = FakeAPI(
