@@ -6,6 +6,7 @@ import session_tui
 from session_tui import (
     AGENT_WORKING_FRAMES,
     SessionBrowserState,
+    _create_session,
     _enter_session,
     _fit_row_segments,
     _format_session_row,
@@ -131,6 +132,17 @@ def test_prompt_submits_rename_action() -> None:
     assert value == "new"
 
 
+def test_create_session_rejects_hidden_managed_index_name() -> None:
+    state = build_state()
+
+    class FakeAPI:
+        def has_session(self, name: str) -> bool:
+            return name == "index"
+
+    _create_session(FakeAPI(), state, "index")
+    assert state.status_message == "Reserved session: index"
+
+
 def test_enter_from_index_session_switches_and_refreshes_order(monkeypatch) -> None:
     state = build_state()
     state.index = 1
@@ -227,6 +239,17 @@ def test_rename_selected_session_refreshes_state_and_preserves_mark(monkeypatch)
     assert state.marked == {"renamed"}
     assert state.status_message == "Renamed a to renamed"
     assert recorded == [api]
+
+
+def test_rename_selected_session_rejects_hidden_managed_index_name() -> None:
+    state = build_state()
+
+    class FakeAPI:
+        def has_session(self, name: str) -> bool:
+            return name == "index"
+
+    _rename_selected_session(FakeAPI(), state, "index")
+    assert state.status_message == "Reserved session: index"
 
 
 def test_sync_agent_statuses_updates_existing_rows_without_reordering() -> None:

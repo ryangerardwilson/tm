@@ -343,12 +343,21 @@ def _visible_sessions(sessions: list[Session]) -> list[Session]:
     return [session for session in sessions if session.name != INDEX_SESSION_NAME]
 
 
+def _session_name_validation_error(api: TmuxAPI, session_name: str) -> str | None:
+    if session_name == INDEX_SESSION_NAME:
+        return f"Reserved session: {session_name}"
+    if api.has_session(session_name):
+        return f"Session exists: {session_name}"
+    return None
+
+
 def _create_session(api: TmuxAPI, state: SessionBrowserState, session_name: str) -> None:
     if not session_name:
         state.end_prompt("Empty session name")
         return
-    if api.has_session(session_name):
-        state.end_prompt(f"Session exists: {session_name}")
+    validation_error = _session_name_validation_error(api, session_name)
+    if validation_error:
+        state.end_prompt(validation_error)
         return
     rc = api.new_session(session_name, detached=True)
     if rc != 0:
@@ -369,8 +378,9 @@ def _rename_selected_session(api: TmuxAPI, state: SessionBrowserState, session_n
     if session_name == current:
         state.end_prompt("Name unchanged")
         return
-    if api.has_session(session_name):
-        state.end_prompt(f"Session exists: {session_name}")
+    validation_error = _session_name_validation_error(api, session_name)
+    if validation_error:
+        state.end_prompt(validation_error)
         return
 
     was_marked = current in state.marked
