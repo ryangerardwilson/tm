@@ -32,8 +32,8 @@ features:
   # tm s <session_name>
   tm s root
 
-  inside the browser, create a new named session
-  # n
+  inside the browser, create or rename a named session
+  # n | ,rn
   n
 """
 

@@ -31,6 +31,8 @@ HELP_LINES = [
     "  kill the current session, marked sessions, or visual selection",
     "n",
     "  create a new named session",
+    ",rn",
+    "  rename the current session",
     "?",
     "  toggle this help",
     "q",
@@ -39,6 +41,8 @@ HELP_LINES = [
 
 ANIMATION_TIMEOUT_MS = 60
 AGENT_STATUS_REFRESH_TICKS = 16
+LEADER_KEY = ord(",")
+LEADER_RENAME_SEQUENCE = "rn"
 AGENT_WORKING_FRAMES = [
     " ◐◐◐◐◐◐",
     " ◓◓◓◓◓◓",
@@ -61,9 +65,12 @@ class SessionBrowserState:
     show_help: bool = False
     help_scroll: int = 0
     status_message: str = ""
+    leader_active: bool = False
+    leader_buffer: str = ""
     prompt_active: bool = False
     prompt_buffer: str = ""
     prompt_label: str = ""
+    prompt_action: str = ""
     animation_step: int = 0
     agent_refresh_tick: int = 0
 
@@ -117,15 +124,29 @@ class SessionBrowserState:
         self.visual_mode = False
         self.visual_anchor = None
 
-    def begin_prompt(self, label: str) -> None:
+    def begin_leader(self) -> None:
+        self.leader_active = True
+        self.leader_buffer = ""
+        self.status_message = ""
+
+    def reset_leader(self, message: str = "") -> None:
+        self.leader_active = False
+        self.leader_buffer = ""
+        if message:
+            self.status_message = message
+
+    def begin_prompt(self, label: str, action: str, initial_value: str = "") -> None:
+        self.reset_leader()
         self.prompt_active = True
         self.prompt_label = label
-        self.prompt_buffer = ""
+        self.prompt_action = action
+        self.prompt_buffer = initial_value
         self.status_message = ""
 
     def end_prompt(self, message: str = "") -> None:
         self.prompt_active = False
         self.prompt_label = ""
+        self.prompt_action = ""
         self.prompt_buffer = ""
         self.status_message = message
 
@@ -166,6 +187,8 @@ class SessionBrowserState:
             parts.append(f"{len(self.marked)} marked")
         if self.visual_mode:
             parts.append(f"{len(self.visual_indexes())} visual")
+        if self.leader_active:
+            parts.append(f",{self.leader_buffer}")
         if self.status_message:
             parts.append(self.status_message)
         return "  ".join(parts)
@@ -335,6 +358,31 @@ def _create_session(api: TmuxAPI, state: SessionBrowserState, session_name: str)
     state.end_prompt(f"Created {session_name}")
 
 
+def _rename_selected_session(api: TmuxAPI, state: SessionBrowserState, session_name: str) -> None:
+    current = state.current_name()
+    if current is None:
+        state.end_prompt("No session selected")
+        return
+    if not session_name:
+        state.end_prompt("Empty session name")
+        return
+    if session_name == current:
+        state.end_prompt("Name unchanged")
+        return
+    if api.has_session(session_name):
+        state.end_prompt(f"Session exists: {session_name}")
+        return
+
+    was_marked = current in state.marked
+    api.rename_session(current, session_name)
+    if was_marked:
+        state.marked.remove(current)
+        state.marked.add(session_name)
+    _refresh_sessions(api, state, preferred=session_name)
+    _save_snapshot_now(api, state)
+    state.end_prompt(f"Renamed {current} to {session_name}")
+
+
 def _enter_session(api: TmuxAPI, state: SessionBrowserState, persistent: bool = False) -> int | None:
     current = state.current_name()
     if current is None:
@@ -378,7 +426,7 @@ def _handle_prompt_key(
         return None, None
     if key in (10, 13, curses.KEY_ENTER):
         value = state.prompt_buffer.strip()
-        return "create", value
+        return state.prompt_action, value
     if key in (curses.KEY_BACKSPACE, 127, 8):
         state.prompt_buffer = state.prompt_buffer[:-1]
         return None, None
@@ -401,7 +449,32 @@ def _handle_help_key(state: SessionBrowserState, key: int, max_y: int) -> None:
         state.help_scroll = min(max_scroll, state.help_scroll + 1)
 
 
+def _handle_leader_key(state: SessionBrowserState, key: int) -> tuple[str | None, str | None]:
+    if key in (27,):
+        state.reset_leader("Cancelled")
+        return None, None
+    if not 32 <= key <= 126:
+        state.reset_leader("Unknown command")
+        return None, None
+
+    state.leader_buffer += chr(key)
+    if LEADER_RENAME_SEQUENCE.startswith(state.leader_buffer):
+        if state.leader_buffer == LEADER_RENAME_SEQUENCE:
+            current = state.current_name()
+            state.reset_leader()
+            if current is None:
+                state.status_message = "No session selected"
+                return None, None
+            return "prompt-rename", current
+        return None, None
+
+    state.reset_leader("Unknown command")
+    return None, None
+
+
 def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None, str | None]:
+    if state.leader_active:
+        return _handle_leader_key(state, key)
     if key == ord("?"):
         state.show_help = True
         state.help_scroll = 0
@@ -425,7 +498,10 @@ def _handle_normal_key(state: SessionBrowserState, key: int) -> tuple[str | None
     if key == ord("x"):
         return "kill", None
     if key == ord("n"):
-        return "prompt", "New session: "
+        return "prompt-create", None
+    if key == LEADER_KEY:
+        state.begin_leader()
+        return None, None
     if 32 <= key <= 126:
         state.status_message = "Unknown command"
         return None, None
@@ -490,13 +566,18 @@ def browse_sessions(api: TmuxAPI, persistent: bool = False) -> int:
                 action, value = _handle_prompt_key(state, key)
                 if action == "create" and value is not None:
                     _create_session(api, state, value)
+                if action == "rename" and value is not None:
+                    _rename_selected_session(api, state, value)
                 continue
 
             action, value = _handle_normal_key(state, key)
             if action == "quit":
                 return 0
-            if action == "prompt" and value is not None:
-                state.begin_prompt(value)
+            if action == "prompt-create":
+                state.begin_prompt("New session: ", action="create")
+                continue
+            if action == "prompt-rename" and value is not None:
+                state.begin_prompt("Rename session: ", action="rename", initial_value=value)
                 continue
             if action == "enter":
                 rc = _enter_session(api, state, persistent=persistent)

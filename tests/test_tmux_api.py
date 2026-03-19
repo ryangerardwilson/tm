@@ -283,6 +283,16 @@ def test_list_sessions_orders_by_most_recent_attach() -> None:
     assert [session.name for session in sessions] == ["newer", "older", "never"]
 
 
+def test_rename_session_uses_tmux_rename_command() -> None:
+    api = FakeAPI(
+        {
+            ("rename-session", "-t", "work", "notes"): FakeProc(returncode=0),
+        }
+    )
+    api.rename_session("work", "notes")
+    assert api.calls == [("rename-session", "-t", "work", "notes")]
+
+
 def test_list_session_agent_statuses_counts_working_and_idle_codex_panes() -> None:
     class AgentAPI(FakeAPI):
         def _process_snapshot(self) -> dict[int, ProcessInfo]:

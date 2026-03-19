@@ -406,6 +406,9 @@ class TmuxAPI:
     def kill_session(self, session_name: str) -> None:
         self._run(["kill-session", "-t", session_name])
 
+    def rename_session(self, current_name: str, new_name: str) -> None:
+        self._run(["rename-session", "-t", current_name, new_name])
+
     def fallback_session(self, target_session: str) -> tuple[str, bool]:
         for session in self.list_sessions():
             if session.name != target_session:

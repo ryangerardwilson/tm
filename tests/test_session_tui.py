@@ -12,6 +12,7 @@ from session_tui import (
     _handle_normal_key,
     _maybe_write_hourly_snapshot,
     _handle_prompt_key,
+    _rename_selected_session,
     _visible_sessions,
 )
 from tmux_api import AgentStatus, Session
@@ -67,8 +68,31 @@ def test_k_wraps_from_first_to_last() -> None:
 def test_n_opens_new_session_prompt() -> None:
     state = build_state()
     action, value = _handle_normal_key(state, ord("n"))
-    assert action == "prompt"
-    assert value == "New session: "
+    assert action == "prompt-create"
+    assert value is None
+
+
+def test_leader_rn_opens_rename_prompt_for_current_session() -> None:
+    state = build_state()
+    state.index = 1
+
+    action, value = _handle_normal_key(state, ord(","))
+    assert action is None
+    assert value is None
+    assert state.leader_active is True
+    assert state.leader_buffer == ""
+
+    action, value = _handle_normal_key(state, ord("r"))
+    assert action is None
+    assert value is None
+    assert state.leader_active is True
+    assert state.leader_buffer == "r"
+
+    action, value = _handle_normal_key(state, ord("n"))
+    assert action == "prompt-rename"
+    assert value == "b"
+    assert state.leader_active is False
+    assert state.leader_buffer == ""
 
 
 def test_index_session_is_hidden_from_browser_rows() -> None:
@@ -82,7 +106,7 @@ def test_index_session_is_hidden_from_browser_rows() -> None:
 
 def test_prompt_collects_name_and_submits() -> None:
     state = build_state()
-    state.begin_prompt("New session: ")
+    state.begin_prompt("New session: ", action="create")
     _handle_prompt_key(state, ord("w"))
     _handle_prompt_key(state, ord("o"))
     _handle_prompt_key(state, ord("r"))
@@ -90,6 +114,21 @@ def test_prompt_collects_name_and_submits() -> None:
     action, value = _handle_prompt_key(state, 10)
     assert action == "create"
     assert value == "work"
+
+
+def test_prompt_submits_rename_action() -> None:
+    state = build_state()
+    state.begin_prompt("Rename session: ", action="rename", initial_value="work")
+    _handle_prompt_key(state, curses.KEY_BACKSPACE)
+    _handle_prompt_key(state, curses.KEY_BACKSPACE)
+    _handle_prompt_key(state, curses.KEY_BACKSPACE)
+    _handle_prompt_key(state, curses.KEY_BACKSPACE)
+    _handle_prompt_key(state, ord("n"))
+    _handle_prompt_key(state, ord("e"))
+    _handle_prompt_key(state, ord("w"))
+    action, value = _handle_prompt_key(state, 10)
+    assert action == "rename"
+    assert value == "new"
 
 
 def test_enter_from_index_session_switches_and_refreshes_order(monkeypatch) -> None:
@@ -142,6 +181,52 @@ def test_enter_from_non_index_tmux_session_exits_browser() -> None:
     rc = _enter_session(api, state)
     assert rc == 0
     assert api.switched == ["a"]
+
+
+def test_rename_selected_session_refreshes_state_and_preserves_mark(monkeypatch) -> None:
+    state = build_state()
+    state.marked.add("a")
+    recorded: list[object] = []
+
+    class FakeAPI:
+        def __init__(self) -> None:
+            self.renamed: list[tuple[str, str]] = []
+
+        def has_session(self, name: str) -> bool:
+            return False
+
+        def rename_session(self, current_name: str, new_name: str) -> None:
+            self.renamed.append((current_name, new_name))
+
+        def list_sessions(self) -> list[Session]:
+            return [
+                Session("renamed", attached=0, windows=1),
+                Session("b", attached=1, windows=2),
+                Session("c", attached=0, windows=3),
+                Session("index", attached=0, windows=1),
+            ]
+
+        def list_session_agent_statuses(self) -> dict[str, AgentStatus]:
+            return {}
+
+    def fake_ensure_index(active_api):  # type: ignore[no-untyped-def]
+        return False
+
+    def fake_write(active_api):  # type: ignore[no-untyped-def]
+        recorded.append(active_api)
+
+    monkeypatch.setattr(session_tui, "ensure_index_session", fake_ensure_index)
+    monkeypatch.setattr(session_tui, "write_runtime_snapshot", fake_write)
+
+    api = FakeAPI()
+    _rename_selected_session(api, state, "renamed")
+
+    assert api.renamed == [("a", "renamed")]
+    assert [session.name for session in state.sessions] == ["renamed", "b", "c"]
+    assert state.current_name() == "renamed"
+    assert state.marked == {"renamed"}
+    assert state.status_message == "Renamed a to renamed"
+    assert recorded == [api]
 
 
 def test_sync_agent_statuses_updates_existing_rows_without_reordering() -> None:
