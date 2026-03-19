@@ -54,45 +54,45 @@ def test_index_browser_command_uses_active_interpreter(monkeypatch) -> None:
 def test_attach_or_create_outside_tmux_attaches_existing() -> None:
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=0),
-            ("attach-session", "-t", "work"): FakeProc(returncode=0),
+            ("has-session", "-t", "=work"): FakeProc(returncode=0),
+            ("attach-session", "-t", "=work"): FakeProc(returncode=0),
         }
     )
     assert attach_or_create_session(api, "work") == 0
     assert api.calls == [
-        ("has-session", "-t", "work"),
-        ("attach-session", "-t", "work"),
+        ("has-session", "-t", "=work"),
+        ("attach-session", "-t", "=work"),
     ]
 
 
 def test_attach_or_create_inside_tmux_creates_and_switches() -> None:
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=1),
+            ("has-session", "-t", "=work"): FakeProc(returncode=1),
             ("new-session", "-d", "-c", "/tmp/home", "-s", "work"): FakeProc(returncode=0),
-            ("switch-client", "-t", "work"): FakeProc(returncode=0),
+            ("switch-client", "-t", "=work"): FakeProc(returncode=0),
         },
         env={"TMUX": "/tmp/socket,1,0", "HOME": "/tmp/home"},
     )
     assert attach_or_create_session(api, "work") == 0
     assert api.calls == [
-        ("has-session", "-t", "work"),
+        ("has-session", "-t", "=work"),
         ("new-session", "-d", "-c", "/tmp/home", "-s", "work"),
-        ("switch-client", "-t", "work"),
+        ("switch-client", "-t", "=work"),
     ]
 
 
 def test_attach_or_create_outside_tmux_creates_in_home_directory() -> None:
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=1),
+            ("has-session", "-t", "=work"): FakeProc(returncode=1),
             ("new-session", "-c", "/tmp/home", "-s", "work"): FakeProc(returncode=0),
         },
         env={"HOME": "/tmp/home"},
     )
     assert attach_or_create_session(api, "work") == 0
     assert api.calls == [
-        ("has-session", "-t", "work"),
+        ("has-session", "-t", "=work"),
         ("new-session", "-c", "/tmp/home", "-s", "work"),
     ]
 
@@ -102,12 +102,12 @@ def test_attach_or_create_index_ensures_managed_session_first(monkeypatch) -> No
 
     class IndexAPI(FakeAPI):
         def has_session(self, name: str) -> bool:
-            self.calls.append(("has-session", "-t", name))
+            self.calls.append(("has-session", "-t", f"={name}"))
             return True
 
     api = IndexAPI(
         {
-            ("switch-client", "-t", "index"): FakeProc(returncode=0),
+            ("switch-client", "-t", "=index"): FakeProc(returncode=0),
         },
         env={"TMUX": "/tmp/socket,1,0"},
     )
@@ -120,23 +120,23 @@ def test_attach_or_create_index_ensures_managed_session_first(monkeypatch) -> No
     assert attach_or_create_session(api, "index") == 0
     assert ensured == [api]
     assert api.calls == [
-        ("has-session", "-t", "index"),
-        ("switch-client", "-t", "index"),
+        ("has-session", "-t", "=index"),
+        ("switch-client", "-t", "=index"),
     ]
 
 
 def test_attach_or_create_inside_tmux_uses_explicit_client_tty_when_available() -> None:
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=0),
-            ("switch-client", "-c", "/dev/pts/0", "-t", "work"): FakeProc(returncode=0),
+            ("has-session", "-t", "=work"): FakeProc(returncode=0),
+            ("switch-client", "-c", "/dev/pts/0", "-t", "=work"): FakeProc(returncode=0),
         },
         env={"TMUX": "/tmp/socket,1,0", "TMUX_CLIENT_TTY": "/dev/pts/0"},
     )
     assert attach_or_create_session(api, "work") == 0
     assert api.calls == [
-        ("has-session", "-t", "work"),
-        ("switch-client", "-c", "/dev/pts/0", "-t", "work"),
+        ("has-session", "-t", "=work"),
+        ("switch-client", "-c", "/dev/pts/0", "-t", "=work"),
     ]
 
 
@@ -144,7 +144,7 @@ def test_ensure_index_session_creates_missing_index() -> None:
     browser_command = index_browser_command()
     api = FakeAPI(
         {
-            ("has-session", "-t", "index"): FakeProc(returncode=1),
+            ("has-session", "-t", "=index"): FakeProc(returncode=1),
             (
                 "new-session",
                 "-d",
@@ -162,7 +162,7 @@ def test_ensure_index_session_creates_missing_index() -> None:
     created = ensure_index_session(api)
     assert created is True
     assert api.calls == [
-        ("has-session", "-t", "index"),
+        ("has-session", "-t", "=index"),
         (
             "new-session",
             "-d",
@@ -186,7 +186,7 @@ def test_ensure_index_session_skips_existing_index() -> None:
 
     api = BrowserAPI(
         {
-            ("has-session", "-t", "index"): FakeProc(returncode=0),
+            ("has-session", "-t", "=index"): FakeProc(returncode=0),
             ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=0, stdout="@1"),
             ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT): FakeProc(
                 stdout="index\t0\t0\t%0\t100\tpython3\t/tmp/home\t1\n"
@@ -196,7 +196,7 @@ def test_ensure_index_session_skips_existing_index() -> None:
     created = ensure_index_session(api)
     assert created is False
     assert api.calls == [
-        ("has-session", "-t", "index"),
+        ("has-session", "-t", "=index"),
         ("display-message", "-p", "-t", "index:index", "#{window_id}"),
         ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT),
     ]
@@ -206,13 +206,13 @@ def test_ensure_index_session_creates_missing_browser_window() -> None:
     browser_command = index_browser_command()
     api = FakeAPI(
         {
-            ("has-session", "-t", "index"): FakeProc(returncode=0),
+            ("has-session", "-t", "=index"): FakeProc(returncode=0),
             ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=1),
             (
                 "new-window",
                 "-d",
                 "-t",
-                "index",
+                "=index",
                 "-n",
                 INDEX_WINDOW_NAME,
                 "-c",
@@ -225,13 +225,13 @@ def test_ensure_index_session_creates_missing_browser_window() -> None:
     created = ensure_index_session(api)
     assert created is True
     assert api.calls == [
-        ("has-session", "-t", "index"),
+        ("has-session", "-t", "=index"),
         ("display-message", "-p", "-t", "index:index", "#{window_id}"),
         (
             "new-window",
             "-d",
             "-t",
-            "index",
+            "=index",
             "-n",
             INDEX_WINDOW_NAME,
             "-c",
@@ -252,7 +252,7 @@ def test_ensure_index_session_respawns_browser_when_window_exists_without_tm_p()
 
     api = BrokenIndexAPI(
         {
-            ("has-session", "-t", "index"): FakeProc(returncode=0),
+            ("has-session", "-t", "=index"): FakeProc(returncode=0),
             ("display-message", "-p", "-t", "index:index", "#{window_id}"): FakeProc(returncode=0, stdout="@1"),
             ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT): FakeProc(
                 stdout="index\t0\t0\t%0\t100\tbash\t/tmp/home\t1\n"
@@ -264,7 +264,7 @@ def test_ensure_index_session_respawns_browser_when_window_exists_without_tm_p()
     created = ensure_index_session(api)
     assert created is True
     assert api.calls == [
-        ("has-session", "-t", "index"),
+        ("has-session", "-t", "=index"),
         ("display-message", "-p", "-t", "index:index", "#{window_id}"),
         ("list-panes", "-t", "index:index", "-F", LIST_PANES_FORMAT),
         ("respawn-pane", "-k", "-t", "%0", browser_command),
@@ -283,14 +283,24 @@ def test_list_sessions_orders_by_most_recent_attach() -> None:
     assert [session.name for session in sessions] == ["newer", "older", "never"]
 
 
+def test_has_session_uses_exact_target() -> None:
+    api = FakeAPI(
+        {
+            ("has-session", "-t", "=work"): FakeProc(returncode=0),
+        }
+    )
+    assert api.has_session("work") is True
+    assert api.calls == [("has-session", "-t", "=work")]
+
+
 def test_rename_session_uses_tmux_rename_command() -> None:
     api = FakeAPI(
         {
-            ("rename-session", "-t", "work", "notes"): FakeProc(returncode=0),
+            ("rename-session", "-t", "=work", "notes"): FakeProc(returncode=0),
         }
     )
     api.rename_session("work", "notes")
-    assert api.calls == [("rename-session", "-t", "work", "notes")]
+    assert api.calls == [("rename-session", "-t", "=work", "notes")]
 
 
 def test_list_session_agent_statuses_counts_working_and_idle_codex_panes() -> None:
@@ -353,56 +363,56 @@ def test_pane_codex_thread_id_returns_none_when_lsof_is_missing(monkeypatch) -> 
 def test_kill_session_safely_moves_clients_then_kills() -> None:
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=0),
+            ("has-session", "-t", "=work"): FakeProc(returncode=0),
             ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
                 stdout="work\t1\t2\t200\nnotes\t0\t1\t100\n"
             ),
-            ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n/dev/pts/2\n"),
-            ("switch-client", "-c", "/dev/pts/1", "-t", "notes"): FakeProc(returncode=0),
-            ("switch-client", "-c", "/dev/pts/2", "-t", "notes"): FakeProc(returncode=0),
-            ("kill-session", "-t", "work"): FakeProc(returncode=0),
+            ("list-clients", "-t", "=work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n/dev/pts/2\n"),
+            ("switch-client", "-c", "/dev/pts/1", "-t", "=notes"): FakeProc(returncode=0),
+            ("switch-client", "-c", "/dev/pts/2", "-t", "=notes"): FakeProc(returncode=0),
+            ("kill-session", "-t", "=work"): FakeProc(returncode=0),
         }
     )
     fallback = kill_session_safely(api, "work")
     assert fallback == "notes"
     assert api.calls == [
-        ("has-session", "-t", "work"),
+        ("has-session", "-t", "=work"),
         ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
-        ("list-clients", "-t", "work", "-F", "#{client_tty}"),
-        ("switch-client", "-c", "/dev/pts/1", "-t", "notes"),
-        ("switch-client", "-c", "/dev/pts/2", "-t", "notes"),
-        ("kill-session", "-t", "work"),
+        ("list-clients", "-t", "=work", "-F", "#{client_tty}"),
+        ("switch-client", "-c", "/dev/pts/1", "-t", "=notes"),
+        ("switch-client", "-c", "/dev/pts/2", "-t", "=notes"),
+        ("kill-session", "-t", "=work"),
     ]
 
 
 def test_kill_sessions_safely_uses_non_target_fallback_for_multiple_targets() -> None:
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=0),
-            ("has-session", "-t", "notes"): FakeProc(returncode=0),
+            ("has-session", "-t", "=work"): FakeProc(returncode=0),
+            ("has-session", "-t", "=notes"): FakeProc(returncode=0),
             ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
                 stdout="work\t1\t2\t300\nnotes\t1\t1\t200\nkeep\t0\t4\t100\n"
             ),
-            ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
-            ("list-clients", "-t", "notes", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/2\n"),
-            ("switch-client", "-c", "/dev/pts/1", "-t", "keep"): FakeProc(returncode=0),
-            ("switch-client", "-c", "/dev/pts/2", "-t", "keep"): FakeProc(returncode=0),
-            ("kill-session", "-t", "work"): FakeProc(returncode=0),
-            ("kill-session", "-t", "notes"): FakeProc(returncode=0),
+            ("list-clients", "-t", "=work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
+            ("list-clients", "-t", "=notes", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/2\n"),
+            ("switch-client", "-c", "/dev/pts/1", "-t", "=keep"): FakeProc(returncode=0),
+            ("switch-client", "-c", "/dev/pts/2", "-t", "=keep"): FakeProc(returncode=0),
+            ("kill-session", "-t", "=work"): FakeProc(returncode=0),
+            ("kill-session", "-t", "=notes"): FakeProc(returncode=0),
         }
     )
     fallback = kill_sessions_safely(api, ["work", "notes"])
     assert fallback == "keep"
     assert api.calls == [
-        ("has-session", "-t", "work"),
-        ("has-session", "-t", "notes"),
+        ("has-session", "-t", "=work"),
+        ("has-session", "-t", "=notes"),
         ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
-        ("list-clients", "-t", "work", "-F", "#{client_tty}"),
-        ("switch-client", "-c", "/dev/pts/1", "-t", "keep"),
-        ("list-clients", "-t", "notes", "-F", "#{client_tty}"),
-        ("switch-client", "-c", "/dev/pts/2", "-t", "keep"),
-        ("kill-session", "-t", "work"),
-        ("kill-session", "-t", "notes"),
+        ("list-clients", "-t", "=work", "-F", "#{client_tty}"),
+        ("switch-client", "-c", "/dev/pts/1", "-t", "=keep"),
+        ("list-clients", "-t", "=notes", "-F", "#{client_tty}"),
+        ("switch-client", "-c", "/dev/pts/2", "-t", "=keep"),
+        ("kill-session", "-t", "=work"),
+        ("kill-session", "-t", "=notes"),
     ]
 
 
@@ -421,27 +431,27 @@ def test_kill_session_safely_creates_temp_fallback_in_home_directory(monkeypatch
     monkeypatch.setattr(tmux_api.time, "time", lambda: 123)
     api = FakeAPI(
         {
-            ("has-session", "-t", "work"): FakeProc(returncode=0),
+            ("has-session", "-t", "=work"): FakeProc(returncode=0),
             ("list-sessions", "-F", LIST_SESSIONS_FORMAT): FakeProc(
                 stdout="work\t1\t2\t200\n"
             ),
             ("new-session", "-d", "-c", "/tmp/home", "-s", "__tmp_123"): FakeProc(returncode=0),
-            ("list-clients", "-t", "work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
-            ("switch-client", "-c", "/dev/pts/1", "-t", "__tmp_123"): FakeProc(returncode=0),
-            ("kill-session", "-t", "work"): FakeProc(returncode=0),
+            ("list-clients", "-t", "=work", "-F", "#{client_tty}"): FakeProc(stdout="/dev/pts/1\n"),
+            ("switch-client", "-c", "/dev/pts/1", "-t", "=__tmp_123"): FakeProc(returncode=0),
+            ("kill-session", "-t", "=work"): FakeProc(returncode=0),
         },
         env={"HOME": "/tmp/home"},
     )
     fallback = kill_session_safely(api, "work")
     assert fallback == "__tmp_123"
     assert api.calls[:4] == [
-        ("has-session", "-t", "work"),
+        ("has-session", "-t", "=work"),
         ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
         ("list-sessions", "-F", LIST_SESSIONS_FORMAT),
         ("new-session", "-d", "-c", "/tmp/home", "-s", "__tmp_123"),
     ]
     assert api.calls[4:] == [
-        ("list-clients", "-t", "work", "-F", "#{client_tty}"),
-        ("switch-client", "-c", "/dev/pts/1", "-t", "__tmp_123"),
-        ("kill-session", "-t", "work"),
+        ("list-clients", "-t", "=work", "-F", "#{client_tty}"),
+        ("switch-client", "-c", "/dev/pts/1", "-t", "=__tmp_123"),
+        ("kill-session", "-t", "=work"),
     ]

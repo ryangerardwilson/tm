@@ -107,6 +107,10 @@ class TmuxAPI:
     def __init__(self, env: dict[str, str] | None = None) -> None:
         self.env = os.environ.copy() if env is None else dict(env)
 
+    @staticmethod
+    def _session_target(name: str) -> str:
+        return f"={name}"
+
     def default_start_directory(self) -> str:
         return self.env.get("HOME") or str(Path.home())
 
@@ -128,7 +132,7 @@ class TmuxAPI:
         return proc
 
     def has_session(self, name: str) -> bool:
-        return self._run(["has-session", "-t", name], check=False).returncode == 0
+        return self._run(["has-session", "-t", self._session_target(name)], check=False).returncode == 0
 
     def list_sessions(self, allow_missing_server: bool = False) -> list[Session]:
         proc = self._run(
@@ -158,7 +162,7 @@ class TmuxAPI:
         return sorted(sessions, key=lambda session: session.last_attached, reverse=True)
 
     def list_windows(self, session_name: str) -> list[Window]:
-        proc = self._run(["list-windows", "-t", session_name, "-F", LIST_WINDOWS_FORMAT])
+        proc = self._run(["list-windows", "-t", self._session_target(session_name), "-F", LIST_WINDOWS_FORMAT])
         windows: list[Window] = []
         for line in proc.stdout.splitlines():
             index, name, active, layout = (line.split("\t") + ["0", "", "0", ""])[:4]
@@ -324,7 +328,10 @@ class TmuxAPI:
         return statuses
 
     def list_client_ttys(self, session_name: str) -> list[str]:
-        proc = self._run(["list-clients", "-t", session_name, "-F", "#{client_tty}"], check=False)
+        proc = self._run(
+            ["list-clients", "-t", self._session_target(session_name), "-F", "#{client_tty}"],
+            check=False,
+        )
         if proc.returncode != 0:
             return []
         return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
@@ -342,11 +349,11 @@ class TmuxAPI:
         args = ["switch-client"]
         if client_tty:
             args.extend(["-c", client_tty])
-        args.extend(["-t", target_session])
+        args.extend(["-t", self._session_target(target_session)])
         self._run(args)
 
     def attach_session(self, session_name: str) -> int:
-        return self._run(["attach-session", "-t", session_name], check=False).returncode
+        return self._run(["attach-session", "-t", self._session_target(session_name)], check=False).returncode
 
     def new_session(
         self,
@@ -373,7 +380,7 @@ class TmuxAPI:
         start_directory: str | None = None,
         command: str | None = None,
     ) -> int:
-        args = ["new-window", "-d", "-t", session_name, "-n", window_name]
+        args = ["new-window", "-d", "-t", self._session_target(session_name), "-n", window_name]
         args.extend(["-c", start_directory or self.default_start_directory()])
         if command:
             args.append(command)
@@ -404,10 +411,10 @@ class TmuxAPI:
         self._run(["select-pane", "-t", target])
 
     def kill_session(self, session_name: str) -> None:
-        self._run(["kill-session", "-t", session_name])
+        self._run(["kill-session", "-t", self._session_target(session_name)])
 
     def rename_session(self, current_name: str, new_name: str) -> None:
-        self._run(["rename-session", "-t", current_name, new_name])
+        self._run(["rename-session", "-t", self._session_target(current_name), new_name])
 
     def fallback_session(self, target_session: str) -> tuple[str, bool]:
         for session in self.list_sessions():
