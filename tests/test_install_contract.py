@@ -56,6 +56,10 @@ class InstallContractTests(unittest.TestCase):
             home_dir = tmp_path / "home"
             bin_dir.mkdir()
             home_dir.mkdir()
+            managed_bin_dir = home_dir / ".tm" / "bin"
+            managed_bin_dir.mkdir(parents=True)
+            tmux_dir = home_dir / ".tmux"
+            tmux_dir.mkdir()
 
             self._write_executable(
                 bin_dir / "curl",
@@ -68,7 +72,7 @@ class InstallContractTests(unittest.TestCase):
                 "exit 1\n",
             )
             self._write_executable(
-                bin_dir / "tm",
+                managed_bin_dir / "tm",
                 "#!/usr/bin/bash\n"
                 "if [[ \"$1\" == \"-v\" ]]; then\n"
                 "  printf '0.1.21\\n'\n"
@@ -76,6 +80,12 @@ class InstallContractTests(unittest.TestCase):
                 "fi\n"
                 "echo unexpected invocation >&2\n"
                 "exit 1\n",
+            )
+            (tmux_dir / "tm.conf").write_text(
+                '# Managed by tm install.sh\n'
+                'bind -n "C-Insert" run-shell "TMUX_CLIENT_TTY=\'#{client_tty}\' '
+                f'{managed_bin_dir / "tm"} >/dev/null 2>&1"\n',
+                encoding="utf-8",
             )
 
             env = os.environ.copy()
@@ -90,7 +100,10 @@ class InstallContractTests(unittest.TestCase):
                 check=True,
             )
 
-            self.assertIn("already installed", result.stdout)
+            self.assertIn("already installed; refreshing tmux hooks", result.stdout)
+            snippet = (tmux_dir / "tm.conf").read_text(encoding="utf-8")
+            self.assertIn('bind -n "M-i" run-shell', snippet)
+            self.assertIn('unbind -n "C-Insert"', snippet)
 
     def test_local_source_install_writes_venv_launcher(self):
         with tempfile.TemporaryDirectory() as tmp:

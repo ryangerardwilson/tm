@@ -38,6 +38,7 @@ upgrade=false
 no_modify_path=false
 binary_path=""
 latest_version_cache=""
+refresh_only=false
 
 print_message() {
   local level=$1
@@ -48,6 +49,19 @@ print_message() {
 die() {
   print_message error "$1"
   exit 1
+}
+
+managed_installed_version() {
+  local installed_version=""
+
+  if [[ -x "$TMUX_APP_BIN" ]]; then
+    installed_version="$("$TMUX_APP_BIN" -v 2>/dev/null || true)"
+  fi
+  installed_version="${installed_version#v}"
+  if [[ -z "$installed_version" ]]; then
+    return 1
+  fi
+  printf '%s\n' "$installed_version"
 }
 
 create_venv() {
@@ -209,13 +223,10 @@ if $upgrade; then
   [[ -z "$binary_path" ]] || die "-u cannot be used with -b"
   [[ -z "$requested_version" ]] || die "-u cannot be combined with -v <version>"
   requested_version="$(get_latest_version)"
-  if command -v "${APP}" >/dev/null 2>&1; then
-    installed_version="$(${APP} -v 2>/dev/null || true)"
-    installed_version="${installed_version#v}"
-    if [[ -n "$installed_version" && "$installed_version" == "$requested_version" ]]; then
-      print_message info "${APP} version ${requested_version} already installed"
-      exit 0
-    fi
+  installed_version="$(managed_installed_version || true)"
+  if [[ -n "$installed_version" && "$installed_version" == "$requested_version" ]]; then
+    print_message info "${APP} version ${requested_version} already installed; refreshing tmux hooks"
+    refresh_only=true
   fi
 fi
 
@@ -240,40 +251,45 @@ else
   else
     requested_version="${requested_version#v}"
     specific_version="${requested_version}"
-    http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${REPO}/releases/tag/v${requested_version}")
-    if [[ "$http_status" == "404" ]]; then
-      print_message error "Release v${requested_version} not found"
-      print_message info "See available releases: https://github.com/${REPO}/releases"
-      exit 1
+    if [[ "$refresh_only" != "true" ]]; then
+      http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${REPO}/releases/tag/v${requested_version}")
+      if [[ "$http_status" == "404" ]]; then
+        print_message error "Release v${requested_version} not found"
+        print_message info "See available releases: https://github.com/${REPO}/releases"
+        exit 1
+      fi
     fi
   fi
 
-  if command -v "${APP}" >/dev/null 2>&1; then
-    installed_version="$(${APP} -v 2>/dev/null || true)"
-    installed_version="${installed_version#v}"
-    if [[ -n "$installed_version" && "$installed_version" == "$specific_version" ]]; then
-      print_message info "${APP} version ${specific_version} already installed"
-      exit 0
+  installed_version="$(managed_installed_version || true)"
+  if [[ -n "$installed_version" && "$installed_version" == "$specific_version" ]]; then
+    if [[ "$refresh_only" != "true" ]]; then
+      print_message info "${APP} version ${specific_version} already installed; refreshing tmux hooks"
     fi
+    refresh_only=true
   fi
 
-  url="https://github.com/${REPO}/releases/download/v${specific_version}/${FILENAME}"
-  print_message info "\nInstalling ${APP} version: ${specific_version}"
-  curl -# -L -o "$tmp_dir/$FILENAME" "$url"
-  extract_source "$tmp_dir/$FILENAME" "$SOURCE_DIR"
+  if [[ "$refresh_only" != "true" ]]; then
+    url="https://github.com/${REPO}/releases/download/v${specific_version}/${FILENAME}"
+    print_message info "\nInstalling ${APP} version: ${specific_version}"
+    curl -# -L -o "$tmp_dir/$FILENAME" "$url"
+    extract_source "$tmp_dir/$FILENAME" "$SOURCE_DIR"
+  fi
 fi
 
-[[ -f "${SOURCE_DIR}/main.py" ]] || die "Source bundle missing main.py"
-[[ -f "${SOURCE_DIR}/_version.py" ]] || die "Source bundle missing _version.py"
+if [[ "$refresh_only" != "true" ]]; then
+  [[ -f "${SOURCE_DIR}/main.py" ]] || die "Source bundle missing main.py"
+  [[ -f "${SOURCE_DIR}/_version.py" ]] || die "Source bundle missing _version.py"
 
-create_venv
+  create_venv
 
-cat > "${INSTALL_DIR}/${APP}" <<EOF
+  cat > "${INSTALL_DIR}/${APP}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec "${VENV_DIR}/bin/python" "${SOURCE_DIR}/main.py" "\$@"
 EOF
-chmod 755 "${INSTALL_DIR}/${APP}"
+  chmod 755 "${INSTALL_DIR}/${APP}"
+fi
 
 write_tmux_snippet() {
   mkdir -p "$TMUX_SNIPPET_DIR"
