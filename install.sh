@@ -22,7 +22,7 @@ Options:
   -u                         Upgrade to the latest release only when newer
   -b <path>                  Install from a local checkout or source bundle
   -n                         Do not modify shell config to add to PATH
-      --tmux-key <key>       Bind the index-session shortcut in tmux (default: C-Insert)
+      --tmux-key <key>       Bind the index-session shortcut in tmux (default: M-i)
 
       --help                 Compatibility alias for -h
       --version [<version>]  Compatibility alias for -v
@@ -114,7 +114,7 @@ get_latest_version() {
 TMUX_SNIPPET_DIR="$HOME/.tmux"
 TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"
 TMUX_APP_BIN="$INSTALL_DIR/$APP"
-tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}
+tmux_index_key=${TMUX_INDEX_KEY:-M-i}
 previous_tmux_index_key=""
 tmux_index_run_shell_command="$(
   python3 - "$TMUX_APP_BIN" <<'PY'

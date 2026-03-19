@@ -12,7 +12,7 @@ def test_installer_manages_tmux_shortcut_snippet() -> None:
     assert '"$PYTHON_BIN" -m venv --without-pip "$VENV_DIR"' in script
     assert 'virtualenv --python "$PYTHON_BIN" --without-pip "$VENV_DIR"' in script
     assert "--tmux-key <key>" in script
-    assert 'tmux_index_key=${TMUX_INDEX_KEY:-C-Insert}' in script
+    assert 'tmux_index_key=${TMUX_INDEX_KEY:-M-i}' in script
     assert 'TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"' in script
     assert 'TMUX_APP_BIN="$INSTALL_DIR/$APP"' in script
     assert 'detect_previous_tmux_index_key() {' in script
