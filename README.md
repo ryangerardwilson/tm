@@ -12,6 +12,13 @@ Install the latest tagged release with:
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/tm/main/install.sh | bash
 ```
 
+Manually add this to `~/.bashrc`, then reload your shell:
+
+```bash
+export PATH="$HOME/.tm/bin:$PATH"
+source ~/.bashrc
+```
+
 That installs `tm` into `~/.tm/bin/tm` and the release bundle into `~/.tm/app`.
 If `~/.tm/bin` is on your `PATH`, you can run `tm` from any shell.
 
