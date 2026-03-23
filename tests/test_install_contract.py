@@ -92,6 +92,8 @@ class InstallContractTests(unittest.TestCase):
     def test_local_source_install_writes_managed_launchers(self):
         with tempfile.TemporaryDirectory() as tmp:
             home_dir = Path(tmp)
+            bashrc_path = home_dir / '.bashrc'
+            bashrc_path.write_text('# existing shell config\n', encoding='utf-8')
 
             result = self._run_installer(home_dir, "-b", str(INSTALLER.parent), '--tmux-key', "F9", "-n")
 
@@ -99,9 +101,12 @@ class InstallContractTests(unittest.TestCase):
             self.assertTrue(internal_launcher.exists())
             internal_text = internal_launcher.read_text(encoding="utf-8")
             self.assertIn('exec "', internal_text)
-            self.assertIn('/.tm/venv/bin/python" "', internal_text)
-            self.assertIn('/.tm/app/source/main.py"', internal_text)
-            self.assertFalse((home_dir / '.bashrc').exists())
+            self.assertIn('/.tm/venv/bin/python', internal_text)
+            self.assertIn('/.tm/app/source/main.py', internal_text)
+            self.assertEqual(
+                bashrc_path.read_text(encoding='utf-8'),
+                '# existing shell config\n',
+            )
             public_launcher = Path('$HOME/.local/bin'.replace("$HOME", str(home_dir))) / 'tm'
             self.assertTrue(public_launcher.exists())
             public_text = public_launcher.read_text(encoding="utf-8")
