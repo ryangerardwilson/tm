@@ -12,15 +12,20 @@ Install the latest tagged release with:
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/tm/main/install.sh | bash
 ```
 
-Manually add this to `~/.bashrc`, then reload your shell:
+The installer keeps app state under `~/.tm`, publishes the user-facing command
+at `~/.local/bin/tm`, writes the managed tmux snippet to `~/.tmux/tm.conf`,
+and ensures `~/.tmux.conf` sources that snippet.
+
+If `~/.local/bin` is not already on your `PATH`, add it once to `~/.bashrc`
+and reload your shell:
 
 ```bash
-export PATH="$HOME/.tm/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc
 ```
 
-That installs `tm` into `~/.tm/bin/tm` and the release bundle into `~/.tm/app`.
-If `~/.tm/bin` is on your `PATH`, you can run `tm` from any shell.
+The public launcher is `~/.local/bin/tm`. The internal runtime still lives
+under `~/.tm/bin/tm`, with the release bundle in `~/.tm/app`.
 
 Installer shortcuts:
 
@@ -30,14 +35,18 @@ Installer shortcuts:
 - `./install.sh -u`: upgrade to the latest release if newer
 - `./install.sh --tmux-key F8 -u`: override the tmux index shortcut if you want a different key
 
-The installer manages a small tmux snippet at `~/.tmux/tm.conf` and ensures `~/.tmux.conf`
-sources it, so the index-session shortcut is repo-managed instead of hand-maintained.
-That shortcut runs the installed `tm` command, so the managed `index` session is recreated first if it is missing.
-The default shortcut key is `M-i`. You can still override it with `--tmux-key <key>` if you
-want a different tmux key name.
-The managed root tmux bindings are `M-h` for left-pane navigation, `M-|` for horizontal split,
-`M-\\` for vertical split, and `M-d` for kill pane. The snippet removes old conflicting
-`M--`, `M-v`, `C-Home`, `C-End`, and `C-DC` root bindings when it is sourced.
+The installer never edits shell startup files automatically. If `~/.local/bin`
+is already on your `PATH`, no shell change is needed.
+
+The managed tmux snippet keeps the index-session shortcut repo-owned instead of
+hand-maintained. That shortcut runs the installed `tm` command, so the managed
+`index` session is recreated first if it is missing. The default shortcut key
+is `M-i`. You can still override it with `--tmux-key <key>` if you want a
+different tmux key name.
+
+The managed root tmux bindings are `M-h` for left-pane navigation, `M-|` for
+horizontal split, `M-\\` for vertical split, and `M-d` for kill pane. The
+snippet removes old conflicting root bindings when it is sourced.
 
 ## Usage
 

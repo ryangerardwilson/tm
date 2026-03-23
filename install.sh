@@ -9,6 +9,9 @@ APP_DIR="$APP_HOME/app"
 SOURCE_DIR="$APP_DIR/source"
 VENV_DIR="$APP_HOME/venv"
 FILENAME="tm-linux-x64.tar.gz"
+PUBLIC_BIN_DIR="$HOME/.local/bin"
+PUBLIC_LAUNCHER="$PUBLIC_BIN_DIR/${APP}"
+
 
 usage() {
   cat <<EOF
@@ -21,9 +24,8 @@ Options:
   -v [<version>]             Print the latest release version, or install a specific one
   -u                         Upgrade to the latest release only when newer
   -b <path>                  Install from a local checkout or source bundle
-  -n                         Compatibility no-op; installer never modifies shell config
+  -n                         Do not modify shell config to add to PATH
       --tmux-key <key>       Bind the index-session shortcut in tmux (default: M-i)
-
       --help                 Compatibility alias for -h
       --version [<version>]  Compatibility alias for -v
       --upgrade              Compatibility alias for -u
@@ -38,7 +40,6 @@ upgrade=false
 no_modify_path=false
 binary_path=""
 latest_version_cache=""
-refresh_only=false
 
 print_message() {
   local level=$1
@@ -51,41 +52,26 @@ die() {
   exit 1
 }
 
-managed_installed_version() {
-  local installed_version=""
-
-  if [[ -x "$TMUX_APP_BIN" ]]; then
-    installed_version="$("$TMUX_APP_BIN" -v 2>/dev/null || true)"
-  fi
-  installed_version="${installed_version#v}"
-  if [[ -z "$installed_version" ]]; then
-    return 1
-  fi
-  printf '%s\n' "$installed_version"
-}
-
-create_venv() {
-  local venv_log="$tmp_dir/venv-create.log"
-
-  rm -rf "$VENV_DIR"
-  if "$PYTHON_BIN" -m venv --without-pip "$VENV_DIR" >"$venv_log" 2>&1; then
+installed_command_path() {
+  if command -v "${APP}" >/dev/null 2>&1; then
+    command -v "${APP}"
     return 0
   fi
+  if [[ -x "${INSTALL_DIR}/${APP}" ]]; then
+    printf '%s\n' "${INSTALL_DIR}/${APP}"
+    return 0
+  fi
+  if [[ -x "${PUBLIC_LAUNCHER}" ]]; then
+    printf '%s\n' "${PUBLIC_LAUNCHER}"
+    return 0
+  fi
+  return 1
+}
 
-  rm -rf "$VENV_DIR"
-  if command -v virtualenv >/dev/null 2>&1; then
-    if virtualenv --python "$PYTHON_BIN" --without-pip "$VENV_DIR" >"$venv_log" 2>&1; then
-      return 0
-    fi
-  fi
-
-  if [[ -s "$venv_log" ]]; then
-    cat "$venv_log" >&2
-  fi
-  if command -v virtualenv >/dev/null 2>&1; then
-    die "Unable to create virtual environment with python3 -m venv or virtualenv."
-  fi
-  die "Unable to create virtual environment with python3 -m venv. Install python3-venv or virtualenv."
+read_installed_version() {
+  local installed_cmd
+  installed_cmd="$(installed_command_path)" || return 0
+  "$installed_cmd" -v 2>/dev/null || true
 }
 
 extract_source() {
@@ -126,50 +112,117 @@ get_latest_version() {
 }
 
 TMUX_SNIPPET_DIR="$HOME/.tmux"
-TMUX_SNIPPET_FILE="$TMUX_SNIPPET_DIR/${APP}.conf"
-TMUX_APP_BIN="$INSTALL_DIR/$APP"
+TMUX_SNIPPET_FILE="${TMUX_SNIPPET_DIR}/tm.conf"
+TMUX_ROOT_CONF="$HOME/.tmux.conf"
 tmux_index_key=${TMUX_INDEX_KEY:-M-i}
 previous_tmux_index_key=""
-tmux_index_run_shell_command="$(
-  python3 - "$TMUX_APP_BIN" <<'PY'
-import shlex
-import sys
-
-client_tty = "#{client_tty}"
-print(f"TMUX_CLIENT_TTY={shlex.quote(client_tty)} {shlex.quote(sys.argv[1])} >/dev/null 2>&1")
-PY
-)"
-
-detect_previous_tmux_index_key() {
-  python3 - "$1" "$2" <<'PY'
-from pathlib import Path
-import shlex
-import sys
-
-snippet_path = Path(sys.argv[1])
-app_bin = sys.argv[2]
-legacy_action = "switch-client -t index"
-current_action = f'run-shell "{shlex.quote(app_bin)} >/dev/null 2>&1"'
-client_tty_action = f'run-shell "TMUX_CLIENT_TTY={shlex.quote("#{client_tty}")} {shlex.quote(app_bin)} >/dev/null 2>&1"'
-
-for raw_line in reversed(snippet_path.read_text(encoding="utf-8").splitlines()):
-    line = raw_line.strip()
-    if not line.startswith("bind -n "):
-        continue
-    try:
-        key, action = line[len("bind -n ") :].split(" ", 1)
-    except ValueError:
-        continue
-    key = key.strip('"')
-    if action in {legacy_action, current_action, client_tty_action}:
-        print(key)
-        break
-PY
-}
+TMUX_RUN_SHELL_COMMAND="TMUX_CLIENT_TTY='#{client_tty}' \"${PUBLIC_LAUNCHER}\" >/dev/null 2>&1"
 
 if [[ -f "$TMUX_SNIPPET_FILE" ]]; then
-  previous_tmux_index_key="$(detect_previous_tmux_index_key "$TMUX_SNIPPET_FILE" "$TMUX_APP_BIN")"
+  previous_tmux_index_key="$(sed -n 's/^bind -n "\(.*\)" run-shell .*$/\1/p' "$TMUX_SNIPPET_FILE" | tail -n 1)"
 fi
+write_public_launcher() {
+  if [[ -e "$PUBLIC_LAUNCHER" && ! -L "$PUBLIC_LAUNCHER" && ! -f "$PUBLIC_LAUNCHER" ]]; then
+    die "Refusing to overwrite non-file launcher: $PUBLIC_LAUNCHER"
+  fi
+
+  if [[ -L "$PUBLIC_LAUNCHER" ]]; then
+    local resolved
+    resolved="$(readlink -f "$PUBLIC_LAUNCHER" 2>/dev/null || true)"
+    if [[ "$resolved" != "${INSTALL_DIR}/${APP}" ]]; then
+      die "Refusing to overwrite existing symlink launcher: $PUBLIC_LAUNCHER"
+    fi
+  elif [[ -f "$PUBLIC_LAUNCHER" ]] && ! grep -Fq '# Managed by rgw_cli_contract local-bin launcher' "$PUBLIC_LAUNCHER" 2>/dev/null; then
+    die "Refusing to overwrite existing launcher: $PUBLIC_LAUNCHER"
+  fi
+
+  mkdir -p "$PUBLIC_BIN_DIR"
+  cat > "${PUBLIC_LAUNCHER}" <<EOF
+#!/usr/bin/env bash
+# Managed by rgw_cli_contract local-bin launcher
+set -euo pipefail
+exec "${INSTALL_DIR}/${APP}" "\$@"
+EOF
+  chmod 755 "${PUBLIC_LAUNCHER}"
+}
+
+write_tmux_snippet() {
+  mkdir -p "$TMUX_SNIPPET_DIR"
+  local -a unbind_keys=(C-i Tab C-Insert Insert F8 F9 F12 M-h 'M-|' 'M-\\' M-d M-- M-v M-Home M-End M-DC)
+  local tmux_run_shell_escaped="${TMUX_RUN_SHELL_COMMAND//\"/\\\"}"
+  {
+    echo "# Managed by ${APP} install.sh"
+    declare -A seen=()
+    local key
+    for key in "$tmux_index_key" "$previous_tmux_index_key" "${unbind_keys[@]}"; do
+      [[ -n "$key" ]] || continue
+      if [[ -n "${seen[$key]:-}" ]]; then
+        continue
+      fi
+      seen["$key"]=1
+      printf 'unbind -n "%s"\n' "$key"
+    done
+    printf 'bind -n "%s" run-shell "%s"\n' "$tmux_index_key" "$tmux_run_shell_escaped"
+    printf '%s\n' 'bind -n "M-h" select-pane -L'
+    printf '%s\n' 'bind -n "M-|" split-window -h -c "#{pane_current_path}"'
+    printf '%s\n' 'bind -n "M-\\" split-window -v -c "#{pane_current_path}"'
+    printf '%s\n' 'bind -n "M-d" kill-pane'
+  } > "$TMUX_SNIPPET_FILE"
+}
+
+ensure_tmux_config_sources_snippet() {
+  local source_line="source-file $TMUX_SNIPPET_FILE"
+  local tmp
+
+  if [[ ! -e "$TMUX_ROOT_CONF" ]]; then
+    touch "$TMUX_ROOT_CONF"
+  fi
+
+  tmp=$(mktemp "${TMPDIR:-/tmp}/${APP}-tmux-conf.XXXXXX")
+  python3 - "$TMUX_ROOT_CONF" "$tmp" "$source_line" <<'PY'
+from pathlib import Path
+import sys
+
+tmux_conf = Path(sys.argv[1])
+tmp = Path(sys.argv[2])
+source_line = sys.argv[3]
+legacy_lines = {
+    'unbind -n C-Insert',
+    'bind -n C-Insert switch-client -t index',
+    'unbind -n Insert',
+    'bind -n Insert switch-client -t index',
+}
+
+existing = tmux_conf.read_text() if tmux_conf.exists() else ""
+lines = [line for line in existing.splitlines() if line.strip() not in legacy_lines]
+while lines and lines[-1] == "":
+    lines.pop()
+if source_line not in lines:
+    if lines:
+        lines.append("")
+    lines.append(f"# {Path(source_line.split(maxsplit=1)[1]).stem.upper()}")
+    lines.append(source_line)
+tmp.write_text("\n".join(lines) + "\n")
+PY
+  mv "$tmp" "$TMUX_ROOT_CONF"
+}
+
+finalize_install() {
+  write_public_launcher
+  write_tmux_snippet
+  ensure_tmux_config_sources_snippet
+}
+
+print_manual_shell_steps() {
+  local printed=false
+  if [[ ":$PATH:" != *":$PUBLIC_BIN_DIR:"* ]]; then
+    print_message info "Manually add to ~/.bashrc if needed: export PATH=$PUBLIC_BIN_DIR:\$PATH"
+    printed=true
+  fi
+  if [[ "$printed" == "true" ]]; then
+    print_message info "Reload your shell: source ~/.bashrc"
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -204,7 +257,6 @@ while [[ $# -gt 0 ]]; do
       tmux_index_key="$2"
       shift 2
       ;;
-
     *)
       echo "Warning: Unknown option '$1'" >&2
       shift
@@ -223,15 +275,17 @@ if $upgrade; then
   [[ -z "$binary_path" ]] || die "-u cannot be used with -b"
   [[ -z "$requested_version" ]] || die "-u cannot be combined with -v <version>"
   requested_version="$(get_latest_version)"
-  installed_version="$(managed_installed_version || true)"
+  installed_version="$(read_installed_version)"
+  installed_version="${installed_version#v}"
   if [[ -n "$installed_version" && "$installed_version" == "$requested_version" ]]; then
-    print_message info "${APP} version ${requested_version} already installed; refreshing tmux hooks"
-    refresh_only=true
+    finalize_install
+    print_manual_shell_steps
+    print_message info "${APP} version ${requested_version} already installed"
+    exit 0
   fi
 fi
 
 command -v python3 >/dev/null 2>&1 || { print_message error "'python3' is required but not installed."; exit 1; }
-PYTHON_BIN="$(command -v python3)"
 mkdir -p "$INSTALL_DIR" "$APP_DIR"
 tmp_dir="${TMPDIR:-/tmp}/${APP}_install_$$"
 rm -rf "$tmp_dir"
@@ -251,127 +305,48 @@ else
   else
     requested_version="${requested_version#v}"
     specific_version="${requested_version}"
-    if [[ "$refresh_only" != "true" ]]; then
-      http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${REPO}/releases/tag/v${requested_version}")
-      if [[ "$http_status" == "404" ]]; then
-        print_message error "Release v${requested_version} not found"
-        print_message info "See available releases: https://github.com/${REPO}/releases"
-        exit 1
-      fi
+    http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${REPO}/releases/tag/v${requested_version}")
+    if [[ "$http_status" == "404" ]]; then
+      print_message error "Release v${requested_version} not found"
+      print_message info "See available releases: https://github.com/${REPO}/releases"
+      exit 1
     fi
   fi
 
-  installed_version="$(managed_installed_version || true)"
+  installed_version="$(read_installed_version)"
+  installed_version="${installed_version#v}"
   if [[ -n "$installed_version" && "$installed_version" == "$specific_version" ]]; then
-    if [[ "$refresh_only" != "true" ]]; then
-      print_message info "${APP} version ${specific_version} already installed; refreshing tmux hooks"
-    fi
-    refresh_only=true
+    finalize_install
+    print_manual_shell_steps
+    print_message info "${APP} version ${specific_version} already installed"
+    exit 0
   fi
 
-  if [[ "$refresh_only" != "true" ]]; then
-    url="https://github.com/${REPO}/releases/download/v${specific_version}/${FILENAME}"
-    print_message info "\nInstalling ${APP} version: ${specific_version}"
-    curl -# -L -o "$tmp_dir/$FILENAME" "$url"
-    extract_source "$tmp_dir/$FILENAME" "$SOURCE_DIR"
-  fi
+  url="https://github.com/${REPO}/releases/download/v${specific_version}/${FILENAME}"
+  print_message info "\nInstalling ${APP} version: ${specific_version}"
+  curl -# -L -o "$tmp_dir/$FILENAME" "$url"
+  extract_source "$tmp_dir/$FILENAME" "$SOURCE_DIR"
 fi
 
-if [[ "$refresh_only" != "true" ]]; then
-  [[ -f "${SOURCE_DIR}/main.py" ]] || die "Source bundle missing main.py"
-  [[ -f "${SOURCE_DIR}/_version.py" ]] || die "Source bundle missing _version.py"
+[[ -f "${SOURCE_DIR}/main.py" ]] || die "Source bundle missing main.py"
+[[ -f "${SOURCE_DIR}/_version.py" ]] || die "Source bundle missing _version.py"
 
-  create_venv
 
-  cat > "${INSTALL_DIR}/${APP}" <<EOF
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/pip" install --disable-pip-version-check -U pip >/dev/null
+if [[ -f "${SOURCE_DIR}/requirements.txt" ]]; then
+  "$VENV_DIR/bin/pip" install --disable-pip-version-check -r "${SOURCE_DIR}/requirements.txt" >/dev/null
+fi
+
+cat > "${INSTALL_DIR}/${APP}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+
 exec "${VENV_DIR}/bin/python" "${SOURCE_DIR}/main.py" "\$@"
 EOF
-  chmod 755 "${INSTALL_DIR}/${APP}"
-fi
+chmod 755 "${INSTALL_DIR}/${APP}"
 
-write_tmux_snippet() {
-  mkdir -p "$TMUX_SNIPPET_DIR"
-  {
-    echo "# Managed by tm install.sh"
-    declare -A seen=()
-    local key
-    for key in \
-      "$tmux_index_key" \
-      "$previous_tmux_index_key" \
-      "C-i" \
-      "Tab" \
-      "C-Insert" \
-      "Insert" \
-      "F8" \
-      "F9" \
-      "F12" \
-      "M-h" \
-      "M-|" \
-      "M-\\\\" \
-      "M-d" \
-      "M--" \
-      "M-v" \
-      "M-Home" \
-      "M-End" \
-      "M-DC"; do
-      [[ -n "$key" ]] || continue
-      if [[ -n "${seen[$key]:-}" ]]; then
-        continue
-      fi
-      seen["$key"]=1
-      printf 'unbind -n "%s"\n' "$key"
-    done
-    printf 'bind -n "%s" run-shell "%s"\n' "$tmux_index_key" "$tmux_index_run_shell_command"
-    printf 'bind -n "%s" select-pane -L\n' "M-h"
-    printf 'bind -n "%s" split-window -h -c "#{pane_current_path}"\n' "M-|"
-    printf 'bind -n "%s" split-window -v -c "#{pane_current_path}"\n' "M-\\\\"
-    printf 'bind -n "%s" kill-pane\n' "M-d"
-  } > "$TMUX_SNIPPET_FILE"
-}
+finalize_install
 
-ensure_tmux_config_sources_snippet() {
-  local tmux_conf="$HOME/.tmux.conf"
-  local source_line="source-file $TMUX_SNIPPET_FILE"
-  local tmp
-
-  if [[ ! -e "$tmux_conf" ]]; then
-    touch "$tmux_conf"
-  fi
-
-  tmp=$(mktemp "${TMPDIR:-/tmp}/${APP}-tmux-conf.XXXXXX")
-  python3 - "$tmux_conf" "$tmp" "$source_line" <<'PY'
-from pathlib import Path
-import sys
-
-tmux_conf = Path(sys.argv[1])
-tmp = Path(sys.argv[2])
-source_line = sys.argv[3]
-legacy_lines = {
-    "unbind -n C-Insert",
-    "bind -n C-Insert switch-client -t index",
-    "unbind -n Insert",
-    "bind -n Insert switch-client -t index",
-}
-
-existing = tmux_conf.read_text() if tmux_conf.exists() else ""
-lines = [line for line in existing.splitlines() if line.strip() not in legacy_lines]
-while lines and lines[-1] == "":
-    lines.pop()
-if source_line not in lines:
-    if lines:
-        lines.append("")
-    lines.append(f"# {Path(source_line.split(maxsplit=1)[1]).stem.upper()}")
-    lines.append(source_line)
-tmp.write_text("\n".join(lines) + "\n")
-PY
-  mv "$tmp" "$tmux_conf"
-}
-
-write_tmux_snippet
-ensure_tmux_config_sources_snippet
-
-print_message info "Manually add to ~/.bashrc: export PATH=$INSTALL_DIR:\$PATH"
-print_message info "Reload your shell: source ~/.bashrc"
+print_manual_shell_steps
 print_message info "Run: ${APP} -h"

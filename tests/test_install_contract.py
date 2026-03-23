@@ -8,13 +8,25 @@ import unittest
 INSTALLER = Path(__file__).resolve().parent / "install.sh"
 if not INSTALLER.exists():
     INSTALLER = Path(__file__).resolve().parents[1] / "install.sh"
-ROOT = INSTALLER.resolve().parent
 
 
 class InstallContractTests(unittest.TestCase):
     def _write_executable(self, path: Path, body: str) -> None:
         path.write_text(body, encoding="utf-8")
         path.chmod(0o755)
+
+    def _run_installer(self, home_dir: Path, *args: str, path_prefix: Path | None = None) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env["HOME"] = str(home_dir)
+        if path_prefix is not None:
+            env["PATH"] = f"{path_prefix}:{env['PATH']}"
+        return subprocess.run(
+            ["/usr/bin/bash", str(INSTALLER), *args],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+        )
 
     def test_dash_v_without_argument_prints_latest_release(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,17 +47,7 @@ class InstallContractTests(unittest.TestCase):
                 "exit 1\n",
             )
 
-            env = os.environ.copy()
-            env["PATH"] = f"{bin_dir}:{env['PATH']}"
-            env["HOME"] = str(home_dir)
-
-            result = subprocess.run(
-                ["/usr/bin/bash", str(INSTALLER), "-v"],
-                capture_output=True,
-                text=True,
-                env=env,
-                check=True,
-            )
+            result = self._run_installer(home_dir, "-v", path_prefix=bin_dir)
 
             self.assertEqual(result.stdout.strip(), "0.1.21")
 
@@ -56,10 +58,6 @@ class InstallContractTests(unittest.TestCase):
             home_dir = tmp_path / "home"
             bin_dir.mkdir()
             home_dir.mkdir()
-            managed_bin_dir = home_dir / ".tm" / "bin"
-            managed_bin_dir.mkdir(parents=True)
-            tmux_dir = home_dir / ".tmux"
-            tmux_dir.mkdir()
 
             self._write_executable(
                 bin_dir / "curl",
@@ -72,7 +70,7 @@ class InstallContractTests(unittest.TestCase):
                 "exit 1\n",
             )
             self._write_executable(
-                managed_bin_dir / "tm",
+                bin_dir / "tm",
                 "#!/usr/bin/bash\n"
                 "if [[ \"$1\" == \"-v\" ]]; then\n"
                 "  printf '0.1.21\\n'\n"
@@ -81,57 +79,53 @@ class InstallContractTests(unittest.TestCase):
                 "echo unexpected invocation >&2\n"
                 "exit 1\n",
             )
-            (tmux_dir / "tm.conf").write_text(
-                '# Managed by tm install.sh\n'
-                'bind -n "C-Insert" run-shell "TMUX_CLIENT_TTY=\'#{client_tty}\' '
-                f'{managed_bin_dir / "tm"} >/dev/null 2>&1"\n',
-                encoding="utf-8",
-            )
 
-            env = os.environ.copy()
-            env["PATH"] = f"{bin_dir}:{env['PATH']}"
-            env["HOME"] = str(home_dir)
+            result = self._run_installer(home_dir, "-u", '--tmux-key', "F8", path_prefix=bin_dir)
 
-            result = subprocess.run(
-                ["/usr/bin/bash", str(INSTALLER), "-u"],
-                capture_output=True,
-                text=True,
-                env=env,
-                check=True,
-            )
+            self.assertIn("already installed", result.stdout)
+            self.assertTrue((Path('$HOME/.local/bin'.replace("$HOME", str(home_dir))) / 'tm').exists())
+            snippet = (Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf').read_text(encoding="utf-8")
+            self.assertIn('bind -n "F8" run-shell', snippet)
+            root_conf = (Path('$HOME/.tmux.conf'.replace("$HOME", str(home_dir)))).read_text(encoding="utf-8")
+            self.assertIn(f"source-file {(Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf')}", root_conf)
 
-            self.assertIn("already installed; refreshing tmux hooks", result.stdout)
-            snippet = (tmux_dir / "tm.conf").read_text(encoding="utf-8")
-            self.assertIn('bind -n "M-i" run-shell', snippet)
-            self.assertIn('unbind -n "C-Insert"', snippet)
-
-    def test_local_source_install_writes_venv_launcher(self):
+    def test_local_source_install_writes_managed_launchers(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            home_dir = tmp_path / "home"
-            home_dir.mkdir()
+            home_dir = Path(tmp)
 
-            env = os.environ.copy()
-            env["HOME"] = str(home_dir)
+            result = self._run_installer(home_dir, "-b", str(INSTALLER.parent), '--tmux-key', "F9", "-n")
 
-            subprocess.run(
-                ["/usr/bin/bash", str(INSTALLER), "-b", str(ROOT), "-n"],
+            internal_launcher = home_dir / ".tm" / "bin" / 'tm'
+            self.assertTrue(internal_launcher.exists())
+            internal_text = internal_launcher.read_text(encoding="utf-8")
+            self.assertIn('exec "', internal_text)
+            self.assertIn('/.tm/venv/bin/python" "', internal_text)
+            self.assertIn('/.tm/app/source/main.py"', internal_text)
+            self.assertFalse((home_dir / '.bashrc').exists())
+            public_launcher = Path('$HOME/.local/bin'.replace("$HOME", str(home_dir))) / 'tm'
+            self.assertTrue(public_launcher.exists())
+            public_text = public_launcher.read_text(encoding="utf-8")
+            self.assertIn('# Managed by rgw_cli_contract local-bin launcher', public_text)
+            self.assertIn(f'exec "{internal_launcher}" "$@"', public_text)
+            version = subprocess.run(
+                [str(public_launcher), '-v'],
                 capture_output=True,
                 text=True,
-                env=env,
+                env={**os.environ, 'HOME': str(home_dir)},
                 check=True,
             )
-
-            launcher_path = home_dir / ".tm" / "bin" / "tm"
-            venv_python = home_dir / ".tm" / "venv" / "bin" / "python"
-            source_main = home_dir / ".tm" / "app" / "source" / "main.py"
-
-            self.assertTrue(launcher_path.exists())
-            self.assertTrue(venv_python.exists())
-            launcher = launcher_path.read_text(encoding="utf-8")
-            self.assertIn(str(venv_python), launcher)
-            self.assertIn(str(source_main), launcher)
-            self.assertNotIn("python3", launcher)
+            self.assertEqual(version.stdout.strip(), '0.0.0')
+            self.assertIn(f"Manually add to ~/.bashrc if needed: export PATH={public_launcher.parent}:$PATH", result.stdout)
+            tmux_snippet = Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf'
+            tmux_root_conf = Path('$HOME/.tmux.conf'.replace("$HOME", str(home_dir)))
+            self.assertTrue(tmux_snippet.exists())
+            self.assertTrue(tmux_root_conf.exists())
+            snippet_text = tmux_snippet.read_text(encoding="utf-8")
+            root_conf_text = tmux_root_conf.read_text(encoding="utf-8")
+            self.assertIn('bind -n "F9" run-shell', snippet_text)
+            self.assertIn('bind -n "M-h" select-pane -L', snippet_text)
+            self.assertIn(f'source-file {tmux_snippet}', root_conf_text)
+            self.assertIn(f'\\"{public_launcher}\\"', snippet_text)
 
 
 if __name__ == "__main__":

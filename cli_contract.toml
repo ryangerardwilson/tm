@@ -4,7 +4,42 @@ repo = "ryangerardwilson/tm"
 install_strategy = "python-source"
 release_asset = "tm-linux-x64.tar.gz"
 install_test_path = "tests/test_install_contract.py"
-install_usage_extra_path = ".contract/install_usage_extra.txt"
-install_prelude_path = ".contract/install_prelude.sh"
-install_case_arms_path = ".contract/install_case_arms.sh"
-install_post_install_path = ".contract/install_post_install.sh"
+
+[launcher]
+exposure = "local-bin"
+
+[tmux]
+enabled = true
+default_key = "M-i"
+snippet_name = "tm.conf"
+run_shell_command = "TMUX_CLIENT_TTY='#{client_tty}' \"${PUBLIC_LAUNCHER}\" >/dev/null 2>&1"
+unbind_keys = [
+  "C-i",
+  "Tab",
+  "C-Insert",
+  "Insert",
+  "F8",
+  "F9",
+  "F12",
+  "M-h",
+  "M-|",
+  "M-\\\\",
+  "M-d",
+  "M--",
+  "M-v",
+  "M-Home",
+  "M-End",
+  "M-DC",
+]
+legacy_lines = [
+  "unbind -n C-Insert",
+  "bind -n C-Insert switch-client -t index",
+  "unbind -n Insert",
+  "bind -n Insert switch-client -t index",
+]
+extra_bindings = [
+  "bind -n \"M-h\" select-pane -L",
+  "bind -n \"M-|\" split-window -h -c \"#{pane_current_path}\"",
+  "bind -n \"M-\\\\\" split-window -v -c \"#{pane_current_path}\"",
+  "bind -n \"M-d\" kill-pane",
+]
