@@ -293,6 +293,26 @@ def test_has_session_uses_exact_target() -> None:
     assert api.calls == [("has-session", "-t", "=work")]
 
 
+def test_window_base_index_reads_tmux_option() -> None:
+    api = FakeAPI(
+        {
+            ("show-options", "-gqv", "base-index"): FakeProc(stdout="1\n"),
+        }
+    )
+    assert api.window_base_index() == 1
+    assert api.calls == [("show-options", "-gqv", "base-index")]
+
+
+def test_pane_base_index_defaults_to_zero_on_invalid_value() -> None:
+    api = FakeAPI(
+        {
+            ("show-options", "-gwqv", "pane-base-index"): FakeProc(stdout="invalid\n"),
+        }
+    )
+    assert api.pane_base_index() == 0
+    assert api.calls == [("show-options", "-gwqv", "pane-base-index")]
+
+
 def test_rename_session_uses_tmux_rename_command() -> None:
     api = FakeAPI(
         {

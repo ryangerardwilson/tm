@@ -134,6 +134,12 @@ class TmuxAPI:
     def has_session(self, name: str) -> bool:
         return self._run(["has-session", "-t", self._session_target(name)], check=False).returncode == 0
 
+    def window_base_index(self) -> int:
+        return self._numeric_option(["show-options", "-gqv", "base-index"], default=0)
+
+    def pane_base_index(self) -> int:
+        return self._numeric_option(["show-options", "-gwqv", "pane-base-index"], default=0)
+
     def list_sessions(self, allow_missing_server: bool = False) -> list[Session]:
         proc = self._run(
             [
@@ -233,6 +239,15 @@ class TmuxAPI:
                 continue
             snapshot[pid] = ProcessInfo(pid=pid, ppid=ppid, comm=comm, args=args)
         return snapshot
+
+    def _numeric_option(self, args: list[str], default: int = 0) -> int:
+        proc = self._run(args, check=False)
+        if proc.returncode != 0:
+            return default
+        try:
+            return int((proc.stdout or "").strip() or default)
+        except ValueError:
+            return default
 
     def process_tree(
         self,

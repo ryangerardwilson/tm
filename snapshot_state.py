@@ -186,6 +186,7 @@ def restore_snapshot(api: TmuxAPI, snapshot: SavedSnapshot) -> RestoreResult:
 def _restore_session(api: TmuxAPI, session_snapshot: SessionSnapshot) -> None:
     if not session_snapshot.windows:
         return
+    window_base_index = _window_base_index(api)
     first_window = session_snapshot.windows[0]
     first_pane = first_window.panes[0]
     rc = api.new_session(
@@ -197,7 +198,7 @@ def _restore_session(api: TmuxAPI, session_snapshot: SessionSnapshot) -> None:
     )
     if rc != 0:
         raise TmuxError(f"Unable to restore session: {session_snapshot.name}")
-    _restore_window_layout(api, session_snapshot.name, 0, first_window)
+    _restore_window_layout(api, session_snapshot.name, window_base_index, first_window)
 
     for window_position, window_snapshot in enumerate(session_snapshot.windows[1:], start=1):
         first_window_pane = window_snapshot.panes[0]
@@ -209,18 +210,19 @@ def _restore_session(api: TmuxAPI, session_snapshot: SessionSnapshot) -> None:
         )
         if rc != 0:
             raise TmuxError(f"Unable to restore session: {session_snapshot.name}")
-        _restore_window_layout(api, session_snapshot.name, window_position, window_snapshot)
+        _restore_window_layout(api, session_snapshot.name, window_base_index + window_position, window_snapshot)
 
-    api.select_window(f"{session_snapshot.name}:{session_snapshot.active_window_position}")
+    api.select_window(f"{session_snapshot.name}:{window_base_index + session_snapshot.active_window_position}")
 
 
 def _restore_window_layout(
     api: TmuxAPI,
     session_name: str,
-    window_position: int,
+    window_index: int,
     window_snapshot: WindowSnapshot,
 ) -> None:
-    target = f"{session_name}:{window_position}"
+    pane_base_index = _pane_base_index(api)
+    target = f"{session_name}:{window_index}"
     for pane_snapshot in window_snapshot.panes[1:]:
         rc = api.split_window(
             target,
@@ -231,7 +233,21 @@ def _restore_window_layout(
             raise TmuxError(f"Unable to restore session: {session_name}")
     if window_snapshot.layout:
         api.select_layout(target, window_snapshot.layout)
-    api.select_pane(f"{target}.{window_snapshot.active_pane_position}")
+    api.select_pane(f"{target}.{pane_base_index + window_snapshot.active_pane_position}")
+
+
+def _window_base_index(api: TmuxAPI) -> int:
+    getter = getattr(api, "window_base_index", None)
+    if not callable(getter):
+        return 0
+    return getter()
+
+
+def _pane_base_index(api: TmuxAPI) -> int:
+    getter = getattr(api, "pane_base_index", None)
+    if not callable(getter):
+        return 0
+    return getter()
 
 
 def _restore_command(pane_snapshot: PaneSnapshot) -> str | None:

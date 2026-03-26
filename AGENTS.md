@@ -34,5 +34,6 @@
 ## Release Contract
 - Keep `tm` aligned with the workspace release contract.
 - `install.sh` installs tagged release bundles into `~/.tm/app`, keeps the internal launcher at `~/.tm/bin/tm`, and publishes the user-facing command at `~/.local/bin/tm`.
-- `install.sh` owns the tmux shortcut snippet for the index-session jump plus the repo-managed root bindings `M-h`, `M-|`, `M-\`, and `M-d`; keep that update idempotent and isolated from unrelated user tmux config.
+- `install.sh` owns the full `~/.tmux.conf` payload through the repo-managed `tmux.conf.template`; persistent tmux config changes must be made in this repo, not by hand-editing `~/.tmux.conf`.
+- Do not edit `~/.tmux.conf` directly except for short-lived local testing. After testing, move the change into `~/Apps/tm/`, then use the app install or release-upgrade path so the managed file is regenerated from the app.
 - Tagged builds stamp `_version.py` in the release artifact; the checked-in file stays at `0.0.0`.

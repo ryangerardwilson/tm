@@ -58,13 +58,28 @@ class CaptureAPI:
 
 
 class RestoreAPI:
-    def __init__(self, home: Path, live_sessions: list[Session] | None = None) -> None:
+    def __init__(
+        self,
+        home: Path,
+        live_sessions: list[Session] | None = None,
+        *,
+        window_base_index: int = 1,
+        pane_base_index: int = 1,
+    ) -> None:
         self.env = {"HOME": str(home)}
         self.live_sessions = list(live_sessions or [])
         self.calls: list[tuple[object, ...]] = []
+        self._window_base_index = window_base_index
+        self._pane_base_index = pane_base_index
 
     def default_start_directory(self) -> str:
         return self.env["HOME"]
+
+    def window_base_index(self) -> int:
+        return self._window_base_index
+
+    def pane_base_index(self) -> int:
+        return self._pane_base_index
 
     def list_sessions(self, allow_missing_server: bool = False) -> list[Session]:
         self.calls.append(("list_sessions", allow_missing_server))
@@ -174,14 +189,22 @@ def test_restore_snapshot_rebuilds_tmux_layouts_and_codex_panes(tmp_path: Path) 
             "dev",
             "codex resume 019cf02b-d991-7221-a544-abaa9bbfa2f3",
         ),
-        ("split_window", "work:0", "/tmp/work", None),
-        ("select_layout", "work:0", "layout-left"),
-        ("select_pane", "work:0.1"),
+        ("split_window", "work:1", "/tmp/work", None),
+        ("select_layout", "work:1", "layout-left"),
+        ("select_pane", "work:1.2"),
         ("new_window", "work", "notes", "/tmp/notes", None),
-        ("select_layout", "work:1", "layout-right"),
-        ("select_pane", "work:1.0"),
-        ("select_window", "work:1"),
+        ("select_layout", "work:2", "layout-right"),
+        ("select_pane", "work:2.1"),
+        ("select_window", "work:2"),
     ]
+
+
+def test_restore_snapshot_uses_zero_based_targets_when_tmux_defaults_to_zero(tmp_path: Path) -> None:
+    api = RestoreAPI(tmp_path, window_base_index=0, pane_base_index=0)
+    restore_snapshot(api, build_snapshot())
+    assert ("split_window", "work:0", "/tmp/work", None) in api.calls
+    assert ("select_pane", "work:0.1") in api.calls
+    assert ("select_window", "work:1") in api.calls
 
 
 def test_restore_saved_sessions_if_needed_restores_when_only_index_exists(tmp_path: Path) -> None:

@@ -11,6 +11,7 @@ VENV_DIR="$APP_HOME/venv"
 FILENAME="tm-linux-x64.tar.gz"
 PUBLIC_BIN_DIR="$HOME/.local/bin"
 PUBLIC_LAUNCHER="$PUBLIC_BIN_DIR/${APP}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 
 usage() {
@@ -115,12 +116,7 @@ TMUX_SNIPPET_DIR="$HOME/.tmux"
 TMUX_SNIPPET_FILE="${TMUX_SNIPPET_DIR}/tm.conf"
 TMUX_ROOT_CONF="$HOME/.tmux.conf"
 tmux_index_key=${TMUX_INDEX_KEY:-M-i}
-previous_tmux_index_key=""
-TMUX_RUN_SHELL_COMMAND="TMUX_CLIENT_TTY='#{client_tty}' \"${PUBLIC_LAUNCHER}\" >/dev/null 2>&1"
 
-if [[ -f "$TMUX_SNIPPET_FILE" ]]; then
-  previous_tmux_index_key="$(sed -n 's/^bind -n "\(.*\)" run-shell .*$/\1/p' "$TMUX_SNIPPET_FILE" | tail -n 1)"
-fi
 write_public_launcher() {
   if [[ -e "$PUBLIC_LAUNCHER" && ! -L "$PUBLIC_LAUNCHER" && ! -f "$PUBLIC_LAUNCHER" ]]; then
     die "Refusing to overwrite non-file launcher: $PUBLIC_LAUNCHER"
@@ -146,71 +142,46 @@ EOF
   chmod 755 "${PUBLIC_LAUNCHER}"
 }
 
-write_tmux_snippet() {
-  mkdir -p "$TMUX_SNIPPET_DIR"
-  local -a unbind_keys=(C-i Tab C-Insert Insert F8 F9 F12 M-h 'M-|' 'M-\\' M-d M-- M-v M-Home M-End M-DC)
-  local tmux_run_shell_escaped="${TMUX_RUN_SHELL_COMMAND//\"/\\\"}"
-  {
-    echo "# Managed by ${APP} install.sh"
-    declare -A seen=()
-    local key
-    for key in "$tmux_index_key" "$previous_tmux_index_key" "${unbind_keys[@]}"; do
-      [[ -n "$key" ]] || continue
-      if [[ -n "${seen[$key]:-}" ]]; then
-        continue
-      fi
-      seen["$key"]=1
-      printf 'unbind -n "%s"\n' "$key"
-    done
-    printf 'bind -n "%s" run-shell "%s"\n' "$tmux_index_key" "$tmux_run_shell_escaped"
-    printf '%s\n' 'bind -n "M-h" select-pane -L'
-    printf '%s\n' 'bind -n "M-|" split-window -h -c "#{pane_current_path}"'
-    printf '%s\n' 'bind -n "M-\\" split-window -v -c "#{pane_current_path}"'
-    printf '%s\n' 'bind -n "M-d" kill-pane'
-  } > "$TMUX_SNIPPET_FILE"
+resolve_tmux_template_path() {
+  local candidate
+  for candidate in "${SOURCE_DIR}/tmux.conf.template" "${SCRIPT_DIR}/tmux.conf.template"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  die "Managed tmux template not found"
 }
 
-ensure_tmux_config_sources_snippet() {
-  local source_line="source-file $TMUX_SNIPPET_FILE"
-  local tmp
-
-  if [[ ! -e "$TMUX_ROOT_CONF" ]]; then
-    touch "$TMUX_ROOT_CONF"
-  fi
-
-  tmp=$(mktemp "${TMPDIR:-/tmp}/${APP}-tmux-conf.XXXXXX")
-  python3 - "$TMUX_ROOT_CONF" "$tmp" "$source_line" <<'PY'
+write_tmux_root_conf() {
+  command -v python3 >/dev/null 2>&1 || die "'python3' is required but not installed."
+  local template_path
+  template_path="$(resolve_tmux_template_path)"
+  python3 - "$template_path" "$TMUX_ROOT_CONF" "$tmux_index_key" "$PUBLIC_LAUNCHER" <<'PY'
 from pathlib import Path
 import sys
 
-tmux_conf = Path(sys.argv[1])
-tmp = Path(sys.argv[2])
-source_line = sys.argv[3]
-legacy_lines = {
-    'unbind -n C-Insert',
-    'bind -n C-Insert switch-client -t index',
-    'unbind -n Insert',
-    'bind -n Insert switch-client -t index',
+template_path = Path(sys.argv[1])
+target_path = Path(sys.argv[2])
+tmux_index_key = sys.argv[3]
+public_launcher = sys.argv[4]
+
+rendered = template_path.read_text(encoding="utf-8")
+rendered = rendered.replace("__TMUX_INDEX_KEY__", tmux_index_key)
+rendered = rendered.replace("__TM_PUBLIC_LAUNCHER__", public_launcher)
+target_path.write_text(rendered, encoding="utf-8")
+PY
 }
 
-existing = tmux_conf.read_text() if tmux_conf.exists() else ""
-lines = [line for line in existing.splitlines() if line.strip() not in legacy_lines]
-while lines and lines[-1] == "":
-    lines.pop()
-if source_line not in lines:
-    if lines:
-        lines.append("")
-    lines.append(f"# {Path(source_line.split(maxsplit=1)[1]).stem.upper()}")
-    lines.append(source_line)
-tmp.write_text("\n".join(lines) + "\n")
-PY
-  mv "$tmp" "$TMUX_ROOT_CONF"
+remove_legacy_tmux_snippet() {
+  rm -f "$TMUX_SNIPPET_FILE"
+  rmdir "$TMUX_SNIPPET_DIR" 2>/dev/null || true
 }
 
 finalize_install() {
   write_public_launcher
-  write_tmux_snippet
-  ensure_tmux_config_sources_snippet
+  write_tmux_root_conf
+  remove_legacy_tmux_snippet
 }
 
 print_manual_shell_steps() {

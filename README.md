@@ -13,8 +13,8 @@ curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/tm/main/install.sh
 ```
 
 The installer keeps app state under `~/.tm`, publishes the user-facing command
-at `~/.local/bin/tm`, writes the managed tmux snippet to `~/.tmux/tm.conf`,
-and ensures `~/.tmux.conf` sources that snippet.
+at `~/.local/bin/tm`, and overwrites `~/.tmux.conf` with the repo-managed tmux
+config on every install or upgrade.
 
 If `~/.local/bin` is not already on your `PATH`, add it once to `~/.bashrc`
 and reload your shell:
@@ -38,15 +38,20 @@ Installer shortcuts:
 The installer never edits shell startup files automatically. If `~/.local/bin`
 is already on your `PATH`, no shell change is needed.
 
-The managed tmux snippet keeps the index-session shortcut repo-owned instead of
+`tm` owns the full contents of `~/.tmux.conf`. Persistent tmux config changes
+should be made in the `tm` repo and then installed or upgraded through `tm`,
+not hand-edited in `~/.tmux.conf`.
+
+The managed config keeps the index-session shortcut repo-owned instead of
 hand-maintained. That shortcut runs the installed `tm` command, so the managed
 `index` session is recreated first if it is missing. The default shortcut key
 is `M-i`. You can still override it with `--tmux-key <key>` if you want a
 different tmux key name.
 
-The managed root tmux bindings are `M-h` for left-pane navigation, `M-|` for
-horizontal split, `M-\\` for vertical split, and `M-d` for kill pane. The
-snippet removes old conflicting root bindings when it is sourced.
+The managed root tmux bindings include the current pane, window, session,
+copy-mode, and status-bar setup, including `M-h` for left-pane navigation,
+`M-|` for horizontal split, `M-\\` for vertical split, and `M-d` for kill
+pane.
 
 ## Usage
 

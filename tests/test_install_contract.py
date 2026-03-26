@@ -84,16 +84,26 @@ class InstallContractTests(unittest.TestCase):
 
             self.assertIn("already installed", result.stdout)
             self.assertTrue((Path('$HOME/.local/bin'.replace("$HOME", str(home_dir))) / 'tm').exists())
-            snippet = (Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf').read_text(encoding="utf-8")
-            self.assertIn('bind -n "F8" run-shell', snippet)
+            tmux_snippet = Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf'
+            self.assertFalse(tmux_snippet.exists())
             root_conf = (Path('$HOME/.tmux.conf'.replace("$HOME", str(home_dir)))).read_text(encoding="utf-8")
-            self.assertIn(f"source-file {(Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf')}", root_conf)
+            self.assertIn('bind -n "F8" run-shell', root_conf)
+            self.assertNotIn(str(tmux_snippet), root_conf)
 
     def test_local_source_install_writes_managed_launchers(self):
         with tempfile.TemporaryDirectory() as tmp:
             home_dir = Path(tmp)
             bashrc_path = home_dir / '.bashrc'
             bashrc_path.write_text('# existing shell config\n', encoding='utf-8')
+            legacy_root_conf = home_dir / '.tmux.conf'
+            legacy_root_conf.write_text(
+                'source-file ~/.config/tmux/tmux.conf\n'
+                'source-file ~/.tmux/tm.conf\n',
+                encoding='utf-8',
+            )
+            legacy_snippet = home_dir / '.tmux' / 'tm.conf'
+            legacy_snippet.parent.mkdir()
+            legacy_snippet.write_text('bind -n "F12" run-shell "legacy"\n', encoding='utf-8')
 
             result = self._run_installer(home_dir, "-b", str(INSTALLER.parent), '--tmux-key', "F9", "-n")
 
@@ -121,16 +131,16 @@ class InstallContractTests(unittest.TestCase):
             )
             self.assertEqual(version.stdout.strip(), '0.0.0')
             self.assertIn(f"Manually add to ~/.bashrc if needed: export PATH={public_launcher.parent}:$PATH", result.stdout)
-            tmux_snippet = Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf'
             tmux_root_conf = Path('$HOME/.tmux.conf'.replace("$HOME", str(home_dir)))
-            self.assertTrue(tmux_snippet.exists())
             self.assertTrue(tmux_root_conf.exists())
-            snippet_text = tmux_snippet.read_text(encoding="utf-8")
             root_conf_text = tmux_root_conf.read_text(encoding="utf-8")
-            self.assertIn('bind -n "F9" run-shell', snippet_text)
-            self.assertIn('bind -n "M-h" select-pane -L', snippet_text)
-            self.assertIn(f'source-file {tmux_snippet}', root_conf_text)
-            self.assertIn(f'\\"{public_launcher}\\"', snippet_text)
+            self.assertFalse(legacy_snippet.exists())
+            self.assertIn('bind -n "F9" run-shell', root_conf_text)
+            self.assertIn('bind -n M-h select-pane -L', root_conf_text)
+            self.assertIn('bind -n "M-|" split-window -h -c "#{pane_current_path}"', root_conf_text)
+            self.assertIn(f'\\"{public_launcher}\\"', root_conf_text)
+            self.assertNotIn('source-file ~/.config/tmux/tmux.conf', root_conf_text)
+            self.assertNotIn('source-file ~/.tmux/tm.conf', root_conf_text)
 
 
 if __name__ == "__main__":
