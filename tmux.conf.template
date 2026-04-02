@@ -29,6 +29,9 @@ setw -g mode-keys vi
 bind -T copy-mode-vi v send -X begin-selection
 bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy && tmux display-message 'Yanked to clipboard' || tmux display-message 'Failed to yank to clipboard'"
 bind -T copy-mode-vi M-v send-keys -X rectangle-toggle
+# Let root-table M-j/M-k pane navigation win in copy mode.
+unbind -T copy-mode-vi M-j
+unbind -T copy-mode-vi M-k
 bind -T copy-mode-vi C-j send-keys -X halfpage-down
 bind -T copy-mode-vi C-k send-keys -X halfpage-up
 

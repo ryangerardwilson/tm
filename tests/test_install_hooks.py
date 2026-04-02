@@ -45,4 +45,6 @@ def test_tmux_template_owns_reload_and_managed_bindings() -> None:
     template = (ROOT / "tmux.conf.template").read_text(encoding="utf-8")
     assert 'bind -n "__TMUX_INDEX_KEY__" run-shell "TMUX_CLIENT_TTY=' in template
     assert 'bind -n M-p copy-mode' in template
+    assert 'unbind -T copy-mode-vi M-j' in template
+    assert 'unbind -T copy-mode-vi M-k' in template
     assert 'bind -n "M-|" split-window -v -c "#{pane_current_path}"' in template

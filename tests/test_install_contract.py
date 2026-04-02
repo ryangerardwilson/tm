@@ -137,6 +137,8 @@ class InstallContractTests(unittest.TestCase):
             self.assertFalse(legacy_snippet.exists())
             self.assertIn('bind -n "F9" run-shell', root_conf_text)
             self.assertIn('bind -n M-h select-pane -L', root_conf_text)
+            self.assertIn('unbind -T copy-mode-vi M-j', root_conf_text)
+            self.assertIn('unbind -T copy-mode-vi M-k', root_conf_text)
             self.assertIn('bind -n "M-|" split-window -v -c "#{pane_current_path}"', root_conf_text)
             self.assertIn(f'\\"{public_launcher}\\"', root_conf_text)
             self.assertNotIn('source-file ~/.config/tmux/tmux.conf', root_conf_text)
