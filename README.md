@@ -50,7 +50,7 @@ different tmux key name.
 
 The managed root tmux bindings include the current pane, window, session,
 copy-mode, and status-bar setup, including `M-h` for left-pane navigation,
-`M-|` for horizontal split, `M-\\` for vertical split, and `M-d` for kill
+`M-|` for horizontal split, `M-\\` for vertical split, and `M-c` for kill
 pane.
 
 ## Usage

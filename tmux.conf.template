@@ -16,7 +16,7 @@ unbind -n "F12"
 unbind -n "M-h"
 unbind -n "M-|"
 unbind -n "M-\\"
-unbind -n "M-d"
+unbind -n "M-c"
 unbind -n "M--"
 unbind -n "M-v"
 unbind -n "M-Home"
@@ -53,7 +53,7 @@ bind -n M-K resize-pane -U 5
 bind -n M-J resize-pane -D 5
 bind -n "M-|" split-window -v -c "#{pane_current_path}"
 bind -n "M-\\" split-window -h -c "#{pane_current_path}"
-bind -n "M-d" kill-pane
+bind -n "M-c" kill-pane
 bind -n M-Home split-window -h -c "#{pane_current_path}"
 bind -n M-End split-window -v -c "#{pane_current_path}"
 bind -n M-DC kill-pane
