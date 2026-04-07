@@ -6,9 +6,13 @@ from pathlib import Path
 
 import tmux_api
 from tmux_api import (
+    DEFAULT_INDEX_KEY,
     AgentStatus,
     INDEX_WINDOW_NAME,
     LIST_PANES_FORMAT,
+    MANAGED_COPY_MODE_VI_KEYS,
+    MANAGED_PREFIX_KEYS,
+    MANAGED_ROOT_KEYS,
     TmuxAPI,
     ProcessInfo,
     attach_or_create_session,
@@ -16,6 +20,7 @@ from tmux_api import (
     index_browser_command,
     kill_session_safely,
     kill_sessions_safely,
+    reload_managed_config,
     _rollout_thread_id_from_lsof_output,
 )
 
@@ -138,6 +143,31 @@ def test_attach_or_create_inside_tmux_uses_explicit_client_tty_when_available() 
         ("has-session", "-t", "=work"),
         ("switch-client", "-c", "/dev/pts/0", "-t", "=work"),
     ]
+
+
+def test_reload_managed_config_unbinds_tm_managed_keys_and_sources_primary_conf(tmp_path) -> None:
+    home_dir = tmp_path / "home"
+    config_dir = home_dir / ".config" / "tmux"
+    config_dir.mkdir(parents=True)
+    config_path = config_dir / "tmux.conf"
+    config_path.write_text('bind -n "F10" run-shell "TMUX_CLIENT_TTY=\'#{client_tty}\' \\"/tmp/tm\\" >/dev/null 2>&1"\n')
+
+    api = FakeAPI({}, env={"HOME": str(home_dir)})
+
+    reload_managed_config(api)
+
+    assert ("unbind-key", "-q", "-n", "F10") in api.calls
+    assert ("unbind-key", "-q", "-n", DEFAULT_INDEX_KEY) in api.calls
+    assert ("unbind-key", "-q", "-n", "M-|") in api.calls
+    assert ("unbind-key", "-q", "q") in api.calls
+    assert ("unbind-key", "-q", "-T", "copy-mode-vi", "C-j") in api.calls
+    assert api.calls[-1] == ("source-file", str(config_path))
+    root_unbinds = [call for call in api.calls if call[:3] == ("unbind-key", "-q", "-n")]
+    prefix_unbinds = [call for call in api.calls if call[:2] == ("unbind-key", "-q") and "-n" not in call and "-T" not in call]
+    copy_mode_unbinds = [call for call in api.calls if call[:4] == ("unbind-key", "-q", "-T", "copy-mode-vi")]
+    assert len(root_unbinds) == len({DEFAULT_INDEX_KEY, "F10", *MANAGED_ROOT_KEYS})
+    assert len(prefix_unbinds) == len(MANAGED_PREFIX_KEYS)
+    assert len(copy_mode_unbinds) == len(MANAGED_COPY_MODE_VI_KEYS)
 
 
 def test_ensure_index_session_creates_missing_index() -> None:

@@ -114,10 +114,7 @@ get_latest_version() {
 
 TMUX_CONFIG_DIR="$HOME/.config/tmux"
 TMUX_PRIMARY_CONF="$TMUX_CONFIG_DIR/tmux.conf"
-TMUX_MANAGED_CONF="$TMUX_CONFIG_DIR/tm.conf"
 TMUX_ROOT_CONF="$HOME/.tmux.conf"
-TMUX_MANAGED_BLOCK_START="# >>> tm managed config >>>"
-TMUX_MANAGED_BLOCK_END="# <<< tm managed config <<<"
 TMUX_LEGACY_SNIPPET_DIR="$HOME/.tmux"
 TMUX_LEGACY_SNIPPET_FILE="${TMUX_LEGACY_SNIPPET_DIR}/tm.conf"
 tmux_index_key=${TMUX_INDEX_KEY:-M-i}
@@ -158,12 +155,12 @@ resolve_tmux_template_path() {
   die "Managed tmux template not found"
 }
 
-write_tmux_managed_conf() {
+write_tmux_primary_conf() {
   command -v python3 >/dev/null 2>&1 || die "'python3' is required but not installed."
   local template_path
   template_path="$(resolve_tmux_template_path)"
   mkdir -p "$TMUX_CONFIG_DIR"
-  python3 - "$template_path" "$TMUX_MANAGED_CONF" "$tmux_index_key" "$PUBLIC_LAUNCHER" <<'PY'
+  python3 - "$template_path" "$TMUX_PRIMARY_CONF" "$tmux_index_key" "$PUBLIC_LAUNCHER" <<'PY'
 from pathlib import Path
 import sys
 
@@ -179,66 +176,20 @@ target_path.write_text(rendered, encoding="utf-8")
 PY
 }
 
-ensure_tmux_primary_conf_sources_managed_conf() {
-  command -v python3 >/dev/null 2>&1 || die "'python3' is required but not installed."
-  mkdir -p "$TMUX_CONFIG_DIR"
-  python3 - "$TMUX_PRIMARY_CONF" "$TMUX_MANAGED_BLOCK_START" "$TMUX_MANAGED_BLOCK_END" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-target_path = Path(sys.argv[1])
-block_start = sys.argv[2]
-block_end = sys.argv[3]
-managed_source = "~/.config/tmux/tm.conf"
-
-block = (
-    f"{block_start}\n"
-    f"if-shell '[ -f {managed_source} ]' 'source-file {managed_source}'\n"
-    f"{block_end}\n"
-)
-
-text = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
-text = re.sub(r"^.*source-file ~/.tmux/tm\.conf.*\n?", "", text, flags=re.MULTILINE)
-
-pattern = re.compile(
-    re.escape(block_start) + r"\n.*?\n" + re.escape(block_end) + r"\n?",
-    re.DOTALL,
-)
-if pattern.search(text):
-    text = pattern.sub(block, text, count=1)
-else:
-    if text and not text.endswith("\n"):
-        text += "\n"
-    if text:
-        text += "\n"
-    text += block
-
-target_path.write_text(text, encoding="utf-8")
-PY
-}
-
-write_tmux_root_conf() {
-  cat > "${TMUX_ROOT_CONF}" <<'EOF'
-# Managed by tm installer.
-# Keep tmux startup aligned with ~/.config/tmux/tmux.conf so new servers and
-# Omarchy-triggered reloads use the same config path.
-if-shell '[ -f ~/.config/tmux/tmux.conf ]' 'source-file ~/.config/tmux/tmux.conf'
-if-shell '[ ! -f ~/.config/tmux/tmux.conf ] && [ -f ~/.config/tmux/tm.conf ]' 'source-file ~/.config/tmux/tm.conf'
-EOF
-}
-
-remove_legacy_tmux_snippet() {
+remove_legacy_tmux_files() {
   rm -f "$TMUX_LEGACY_SNIPPET_FILE"
   rmdir "$TMUX_LEGACY_SNIPPET_DIR" 2>/dev/null || true
+  rm -f "$TMUX_CONFIG_DIR/tm.conf"
+
+  if [[ -f "$TMUX_ROOT_CONF" ]] && grep -Eq '^# Managed by tm installer\.|^# Managed tm index jump$' "$TMUX_ROOT_CONF"; then
+    rm -f "$TMUX_ROOT_CONF"
+  fi
 }
 
 finalize_install() {
   write_public_launcher
-  write_tmux_managed_conf
-  ensure_tmux_primary_conf_sources_managed_conf
-  write_tmux_root_conf
-  remove_legacy_tmux_snippet
+  write_tmux_primary_conf
+  remove_legacy_tmux_files
 }
 
 print_manual_shell_steps() {

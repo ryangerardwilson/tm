@@ -17,8 +17,10 @@
 
 ## Interface Rules
 - Keep the default flow fast and shell-native.
-- Bare `tm` is the deliberate no-arg exception to the workspace default help behavior and must switch or attach to the managed `index` session.
-- Any `tm` invocation must ensure the managed `index` session exists and that its `index` window is running `tm p`.
+- Bare `tm` should use the workspace default help behavior.
+- `tm index` must switch or attach to the managed `index` session.
+- `tm reload` must remove tm-managed bindings from the live tmux server and then re-source `~/.config/tmux/tmux.conf`.
+- Any `tm` invocation that targets sessions or the persistent browser must ensure the managed `index` session exists and that its `index` window is running `tm p`.
 - `tm k` should stay dense, grayscale, and keyboard-first.
 - Favor `j`/`k`, arrow keys, `m`, `v`, `x`, `?`, and `q`.
 - Error text should stay short and explicit.
@@ -30,12 +32,13 @@
 - Preserve safe kill semantics by moving attached clients to another session before killing the target.
 - If killing the final non-fallback session requires a temporary session, create it explicitly rather than guessing around tmux internals.
 - Restored non-Codex panes should come back as shells in the saved working directory unless the app has an exact, low-risk resume primitive for that process type.
-- Keep tm narrow. Do not turn it into a general tmux config manager. Omarchy or the user's main tmux config owns pane, window, copy-mode, theme, and status-bar behavior.
-- The tm installer may manage only tm-specific integration points: the launcher binding include under `~/.config/tmux/` and the compatibility shim at `~/.tmux.conf`.
+- Keep tm narrow as an app, but let it own the full managed tmux layer at `~/.config/tmux/tmux.conf` when the user wants tm-driven bindings and defaults.
+- Preserve Omarchy compatibility by sourcing `~/.config/omarchy/current/theme/tmux.conf` from the managed tmux config instead of duplicating theme values in the repo.
 
 ## Release Contract
 - Keep `tm` aligned with the workspace release contract.
 - `install.sh` installs tagged release bundles into `~/.tm/app`, keeps the internal launcher at `~/.tm/bin/tm`, and publishes the user-facing command at `~/.local/bin/tm`.
-- `install.sh` owns the tm-managed include at `~/.config/tmux/tm.conf`, ensures `~/.config/tmux/tmux.conf` sources it, and writes a small compatibility shim at `~/.tmux.conf` so fresh tmux servers and Omarchy reloads converge on the same config path.
-- Do not hand-edit the tm-managed include or the compatibility shim except for short-lived local testing. After testing, move the change into `~/Apps/tm/`, then use the app install or release-upgrade path so the managed files are regenerated from the app.
+- `install.sh` owns the full tmux config at `~/.config/tmux/tmux.conf` and should regenerate that file from `tmux.conf.template` on every install or upgrade.
+- `install.sh` should remove tm-managed legacy files such as `~/.config/tmux/tm.conf`, `~/.tmux/tm.conf`, and tm-managed `~/.tmux.conf` shims so Omarchy and fresh tmux reloads converge on the same config path.
+- Do not hand-edit the managed tmux config except for short-lived local testing. After testing, move the change into `~/Apps/tm/`, then use the app install or release-upgrade path so `~/.config/tmux/tmux.conf` is regenerated from the app.
 - Tagged builds stamp `_version.py` in the release artifact; the checked-in file stays at `0.0.0`.

@@ -25,6 +25,84 @@ LIST_PANES_FORMAT = (
 ROLLOUT_PATH_RE = re.compile(
     r"rollout-.*-(?P<thread_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$"
 )
+MANAGED_INDEX_BIND_RE = re.compile(r'^bind -n "([^"]+)" run-shell "TMUX_CLIENT_TTY=')
+DEFAULT_INDEX_KEY = "M-i"
+MANAGED_TMUX_CONFIG_RELATIVE_PATH = Path(".config") / "tmux" / "tmux.conf"
+MANAGED_PREFIX_KEYS = (
+    "C-Space",
+    "M-a",
+    "q",
+    "h",
+    "v",
+    "x",
+    "r",
+    "c",
+    "k",
+    "R",
+    "C",
+    "K",
+    "P",
+    "N",
+)
+MANAGED_ROOT_KEYS = (
+    "C-i",
+    "Tab",
+    "C-Insert",
+    "Insert",
+    "F8",
+    "F9",
+    "F12",
+    "M-h",
+    "M-|",
+    "M-\\",
+    "M-c",
+    "M--",
+    "M-v",
+    "M-Home",
+    "M-End",
+    "M-DC",
+    "M-p",
+    "M-o",
+    "M-l",
+    "M-k",
+    "M-j",
+    "M-H",
+    "M-L",
+    "M-K",
+    "M-J",
+    "C-M-Left",
+    "C-M-Right",
+    "C-M-Up",
+    "C-M-Down",
+    "C-M-S-Left",
+    "C-M-S-Down",
+    "C-M-S-Up",
+    "C-M-S-Right",
+    "M-1",
+    "M-2",
+    "M-3",
+    "M-4",
+    "M-5",
+    "M-6",
+    "M-7",
+    "M-8",
+    "M-9",
+    "M-Left",
+    "M-Right",
+    "M-S-Left",
+    "M-S-Right",
+    "M-Up",
+    "M-Down",
+)
+MANAGED_COPY_MODE_VI_KEYS = (
+    "v",
+    "y",
+    "M-v",
+    "M-j",
+    "M-k",
+    "C-j",
+    "C-k",
+)
 
 
 @dataclass(frozen=True)
@@ -370,6 +448,18 @@ class TmuxAPI:
     def attach_session(self, session_name: str) -> int:
         return self._run(["attach-session", "-t", self._session_target(session_name)], check=False).returncode
 
+    def unbind_key(self, key: str, table: str | None = None, no_prefix: bool = False) -> None:
+        args = ["unbind-key", "-q"]
+        if no_prefix:
+            args.append("-n")
+        if table is not None:
+            args.extend(["-T", table])
+        args.append(key)
+        self._run(args)
+
+    def source_file(self, path: str) -> None:
+        self._run(["source-file", path])
+
     def new_session(
         self,
         session_name: str,
@@ -447,6 +537,36 @@ def ensure_session_exists(api: TmuxAPI, session_name: str, detached: bool = True
     if rc != 0:
         raise TmuxError(f"Unable to create session: {session_name}")
     return True
+
+
+def managed_tmux_config_path(api: TmuxAPI) -> Path:
+    home = Path(api.env.get("HOME") or str(Path.home()))
+    return home / MANAGED_TMUX_CONFIG_RELATIVE_PATH
+
+
+def managed_index_key(config_path: Path) -> str:
+    try:
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            match = MANAGED_INDEX_BIND_RE.match(line.strip())
+            if match:
+                return match.group(1)
+    except OSError:
+        return DEFAULT_INDEX_KEY
+    return DEFAULT_INDEX_KEY
+
+
+def reload_managed_config(api: TmuxAPI) -> None:
+    config_path = managed_tmux_config_path(api)
+    root_keys = dict.fromkeys((managed_index_key(config_path), DEFAULT_INDEX_KEY, *MANAGED_ROOT_KEYS))
+
+    for key in root_keys:
+        api.unbind_key(key, no_prefix=True)
+    for key in MANAGED_PREFIX_KEYS:
+        api.unbind_key(key)
+    for key in MANAGED_COPY_MODE_VI_KEYS:
+        api.unbind_key(key, table="copy-mode-vi")
+
+    api.source_file(str(config_path))
 
 
 def index_browser_command() -> str:

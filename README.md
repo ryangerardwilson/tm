@@ -13,10 +13,8 @@ curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/tm/main/install.sh
 ```
 
 The installer keeps app state under `~/.tm`, publishes the user-facing command
-at `~/.local/bin/tm`, writes the tm-managed binding include to
-`~/.config/tmux/tm.conf`, ensures `~/.config/tmux/tmux.conf` sources it, and
-replaces `~/.tmux.conf` with a small compatibility shim that sources
-`~/.config/tmux/tmux.conf`.
+at `~/.local/bin/tm`, and overwrites `~/.config/tmux/tmux.conf` with the
+repo-managed tmux config on every install or upgrade.
 
 If `~/.local/bin` is not already on your `PATH`, add it once to `~/.bashrc`
 and reload your shell:
@@ -40,12 +38,14 @@ Installer shortcuts:
 The installer never edits shell startup files automatically. If `~/.local/bin`
 is already on your `PATH`, no shell change is needed.
 
-`tm` does not own your full tmux config. Omarchy or your main tmux config
-continues to own pane, window, copy-mode, theme, and status-bar behavior.
-`tm` only owns its launcher binding include at `~/.config/tmux/tm.conf` plus
-the compatibility shim at `~/.tmux.conf`. Persistent changes to those
-tm-managed files should be made in the `tm` repo and then installed or
-upgraded through `tm`, not hand-edited in place.
+`tm` owns the full contents of `~/.config/tmux/tmux.conf`. Persistent tmux
+config changes should be made in the `tm` repo and then installed or upgraded
+through `tm`, not hand-edited in `~/.config/tmux/tmux.conf`.
+
+`tm` does not depend on `~/.tmux.conf`. During install or upgrade it removes
+tm-managed legacy shims such as `~/.tmux.conf`, `~/.tmux/tm.conf`, and
+`~/.config/tmux/tm.conf` so Omarchy and tmux both converge on the same
+`~/.config/tmux/tmux.conf` source of truth.
 
 The managed config keeps the index-session shortcut repo-owned instead of
 hand-maintained. That shortcut runs the installed `tm` command, so the managed
@@ -53,14 +53,22 @@ hand-maintained. That shortcut runs the installed `tm` command, so the managed
 is `M-i`. You can still override it with `--tmux-key <key>` if you want a
 different tmux key name.
 
-The managed tmux integration only owns the index-session shortcut binding.
-Everything else stays with Omarchy or your main tmux config.
+The managed prefix-`q` reload now runs `tm reload`, which first unbinds the
+tm-managed key set from the live tmux server and then re-sources
+`~/.config/tmux/tmux.conf`. Use that after upgrading `tm` if your current tmux
+server was started with an older binding set.
+
+The managed tmux config keeps the index-session shortcut and the pane, window,
+session, copy-mode, and status-bar setup repo-owned while still sourcing the
+active Omarchy theme from `~/.config/omarchy/current/theme/tmux.conf`.
 
 ## Usage
 
 ```bash
 tm
 tm -h
+tm index
+tm reload
 tm s root
 tm -v
 tm -u
@@ -73,10 +81,10 @@ release workflow.
 ### Index Session
 
 ```bash
-tm
+tm index
 ```
 
-`tm` switches to the managed `index` session outside tmux or switches your current tmux client to it inside tmux.
+`tm index` switches to the managed `index` session outside tmux or switches your current tmux client to it inside tmux. Bare `tm` now shows help.
 
 The persistent index browser writes an automatic restore snapshot once per hour in the background.
 Every `tm` invocation also ensures the managed `index` session exists and that its `index` window is running `tm p`.

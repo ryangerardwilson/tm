@@ -80,82 +80,102 @@ class InstallContractTests(unittest.TestCase):
                 "exit 1\n",
             )
 
-            result = self._run_installer(home_dir, "-u", '--tmux-key', "F8", path_prefix=bin_dir)
+            result = self._run_installer(home_dir, "-u", "--tmux-key", "F8", path_prefix=bin_dir)
 
             self.assertIn("already installed", result.stdout)
-            self.assertTrue((Path('$HOME/.local/bin'.replace("$HOME", str(home_dir))) / 'tm').exists())
-            legacy_snippet = Path('$HOME/.tmux'.replace("$HOME", str(home_dir))) / 'tm.conf'
-            self.assertFalse(legacy_snippet.exists())
-            managed_conf = (home_dir / ".config" / "tmux" / "tm.conf").read_text(encoding="utf-8")
+            self.assertTrue((home_dir / ".local" / "bin" / "tm").exists())
             primary_conf = (home_dir / ".config" / "tmux" / "tmux.conf").read_text(encoding="utf-8")
-            root_conf = (home_dir / ".tmux.conf").read_text(encoding="utf-8")
-            self.assertIn('bind -n "F8" run-shell', managed_conf)
-            self.assertIn("source-file ~/.config/tmux/tm.conf", primary_conf)
-            self.assertIn("source-file ~/.config/tmux/tmux.conf", root_conf)
-            self.assertNotIn(str(legacy_snippet), root_conf)
+            self.assertIn('bind -n "F8" run-shell', primary_conf)
+            self.assertIn('bind q run-shell', primary_conf)
+            self.assertIn('\\"/tmp', primary_conf)
+            self.assertIn('\\" reload >/dev/null 2>&1', primary_conf)
+            self.assertIn("set -g prefix C-Space", primary_conf)
+            self.assertIn('bind -n "M-|" split-window -v -c "#{pane_current_path}"', primary_conf)
+            self.assertIn('bind -n "M-\\\\" split-window -h -c "#{pane_current_path}"', primary_conf)
+            self.assertIn('bind -n "M-c" kill-pane', primary_conf)
+            self.assertIn("bind -n M-p copy-mode", primary_conf)
+            self.assertIn('set -g status-style "bg=default,fg=default"', primary_conf)
+            self.assertIn("source-file ~/.config/omarchy/current/theme/tmux.conf", primary_conf)
+            self.assertFalse((home_dir / ".config" / "tmux" / "tm.conf").exists())
+            self.assertFalse((home_dir / ".tmux" / "tm.conf").exists())
+            self.assertFalse((home_dir / ".tmux.conf").exists())
 
     def test_local_source_install_writes_managed_launchers(self):
         with tempfile.TemporaryDirectory() as tmp:
             home_dir = Path(tmp)
-            bashrc_path = home_dir / '.bashrc'
-            bashrc_path.write_text('# existing shell config\n', encoding='utf-8')
-            tmux_primary_conf = home_dir / '.config' / 'tmux' / 'tmux.conf'
+            bashrc_path = home_dir / ".bashrc"
+            bashrc_path.write_text("# existing shell config\n", encoding="utf-8")
+            tmux_primary_conf = home_dir / ".config" / "tmux" / "tmux.conf"
             tmux_primary_conf.parent.mkdir(parents=True)
             tmux_primary_conf.write_text(
-                'set -g prefix C-Space\n'
-                'bind q source-file ~/.config/tmux/tmux.conf\n',
-                encoding='utf-8',
+                "set -g prefix C-b\n"
+                "bind r source-file ~/.tmux.conf\n",
+                encoding="utf-8",
             )
-            legacy_root_conf = home_dir / '.tmux.conf'
+            legacy_root_conf = home_dir / ".tmux.conf"
             legacy_root_conf.write_text(
-                'source-file ~/.config/tmux/tmux.conf\n'
-                'source-file ~/.tmux/tm.conf\n',
-                encoding='utf-8',
+                "# Managed by tm installer.\n"
+                "source-file ~/.config/tmux/tmux.conf\n",
+                encoding="utf-8",
             )
-            legacy_snippet = home_dir / '.tmux' / 'tm.conf'
+            legacy_snippet = home_dir / ".tmux" / "tm.conf"
             legacy_snippet.parent.mkdir()
-            legacy_snippet.write_text('bind -n "F12" run-shell "legacy"\n', encoding='utf-8')
+            legacy_snippet.write_text('bind -n "F12" run-shell "legacy"\n', encoding="utf-8")
+            managed_include = home_dir / ".config" / "tmux" / "tm.conf"
+            managed_include.write_text('bind -n "F7" run-shell "old"\n', encoding="utf-8")
 
-            result = self._run_installer(home_dir, "-b", str(INSTALLER.parent), '--tmux-key', "F9", "-n")
+            result = self._run_installer(home_dir, "-b", str(INSTALLER.parent), "--tmux-key", "F9", "-n")
 
-            internal_launcher = home_dir / ".tm" / "bin" / 'tm'
+            internal_launcher = home_dir / ".tm" / "bin" / "tm"
             self.assertTrue(internal_launcher.exists())
             internal_text = internal_launcher.read_text(encoding="utf-8")
             self.assertIn('exec "', internal_text)
-            self.assertIn('/.tm/venv/bin/python', internal_text)
-            self.assertIn('/.tm/app/source/main.py', internal_text)
+            self.assertIn("/.tm/venv/bin/python", internal_text)
+            self.assertIn("/.tm/app/source/main.py", internal_text)
             self.assertEqual(
-                bashrc_path.read_text(encoding='utf-8'),
-                '# existing shell config\n',
+                bashrc_path.read_text(encoding="utf-8"),
+                "# existing shell config\n",
             )
-            public_launcher = Path('$HOME/.local/bin'.replace("$HOME", str(home_dir))) / 'tm'
+            public_launcher = home_dir / ".local" / "bin" / "tm"
             self.assertTrue(public_launcher.exists())
             public_text = public_launcher.read_text(encoding="utf-8")
-            self.assertIn('# Managed by rgw_cli_contract local-bin launcher', public_text)
+            self.assertIn("# Managed by rgw_cli_contract local-bin launcher", public_text)
             self.assertIn(f'exec "{internal_launcher}" "$@"', public_text)
             version = subprocess.run(
-                [str(public_launcher), '-v'],
+                [str(public_launcher), "-v"],
                 capture_output=True,
                 text=True,
-                env={**os.environ, 'HOME': str(home_dir)},
+                env={**os.environ, "HOME": str(home_dir)},
                 check=True,
             )
-            self.assertEqual(version.stdout.strip(), '0.0.0')
+            self.assertEqual(version.stdout.strip(), "0.0.0")
             self.assertIn(f"Manually add to ~/.bashrc if needed: export PATH={public_launcher.parent}:$PATH", result.stdout)
-            tmux_root_conf = home_dir / '.tmux.conf'
-            self.assertTrue(tmux_root_conf.exists())
-            root_conf_text = tmux_root_conf.read_text(encoding="utf-8")
+            self.assertFalse(legacy_root_conf.exists())
             self.assertFalse(legacy_snippet.exists())
-            managed_conf = (home_dir / '.config' / 'tmux' / 'tm.conf').read_text(encoding='utf-8')
-            primary_conf_text = tmux_primary_conf.read_text(encoding='utf-8')
-            self.assertIn('bind -n "F9" run-shell', managed_conf)
-            self.assertIn(f'\\"{public_launcher}\\"', managed_conf)
-            self.assertIn('set -g prefix C-Space', primary_conf_text)
-            self.assertIn('bind q source-file ~/.config/tmux/tmux.conf', primary_conf_text)
-            self.assertIn('source-file ~/.config/tmux/tm.conf', primary_conf_text)
-            self.assertIn('source-file ~/.config/tmux/tmux.conf', root_conf_text)
-            self.assertNotIn('source-file ~/.tmux/tm.conf', root_conf_text)
-            self.assertNotIn('bind -n "F9" run-shell', root_conf_text)
+            self.assertFalse(managed_include.exists())
+            primary_conf_text = tmux_primary_conf.read_text(encoding="utf-8")
+            self.assertIn('bind -n "F9" run-shell', primary_conf_text)
+            self.assertIn(f'\\"{public_launcher}\\"', primary_conf_text)
+            self.assertIn("set -g prefix C-Space", primary_conf_text)
+            self.assertIn("bind q run-shell", primary_conf_text)
+            self.assertIn(f'\\"{public_launcher}\\" reload >/dev/null 2>&1', primary_conf_text)
+            self.assertIn("bind -n M-p copy-mode", primary_conf_text)
+            self.assertIn('bind -n "M-|" split-window -v -c "#{pane_current_path}"', primary_conf_text)
+            self.assertIn('bind -n "M-\\\\" split-window -h -c "#{pane_current_path}"', primary_conf_text)
+            self.assertIn('bind -n "M-c" kill-pane', primary_conf_text)
+            self.assertIn("source-file ~/.config/omarchy/current/theme/tmux.conf", primary_conf_text)
+            self.assertNotIn("legacy", primary_conf_text)
+            self.assertNotIn("source-file ~/.config/tmux/tm.conf", primary_conf_text)
+
+    def test_local_source_install_preserves_non_tm_root_tmux_conf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home_dir = Path(tmp)
+            root_conf = home_dir / ".tmux.conf"
+            root_conf.write_text("set -g status on\n", encoding="utf-8")
+
+            self._run_installer(home_dir, "-b", str(INSTALLER.parent), "-n")
+
+            self.assertEqual(root_conf.read_text(encoding="utf-8"), "set -g status on\n")
 
 
 if __name__ == "__main__":

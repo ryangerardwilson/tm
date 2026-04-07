@@ -11,10 +11,37 @@ exposure = "local-bin"
 [tmux]
 enabled = true
 default_key = "M-i"
-snippet_name = "tm.conf"
+snippet_name = "tmux.conf"
 run_shell_command = "TMUX_CLIENT_TTY='#{client_tty}' \"${PUBLIC_LAUNCHER}\" >/dev/null 2>&1"
-unbind_keys = []
+unbind_keys = [
+  "C-i",
+  "Tab",
+  "C-Insert",
+  "Insert",
+  "F8",
+  "F9",
+  "F12",
+  "M-h",
+  "M-|",
+  "M-\\",
+  "M-c",
+  "M--",
+  "M-v",
+  "M-Home",
+  "M-End",
+  "M-DC",
+]
 legacy_lines = [
   "source-file ~/.tmux/tm.conf",
+  "source-file ~/.config/tmux/tm.conf",
 ]
-extra_bindings = []
+extra_bindings = [
+  "set -g prefix C-Space",
+  "set -g prefix2 M-a",
+  "bind q run-shell '\"${PUBLIC_LAUNCHER}\" reload >/dev/null 2>&1'",
+  "bind -n M-p copy-mode",
+  "bind -n M-| split-window -v -c '#{pane_current_path}'",
+  "bind -n M-\\\\ split-window -h -c '#{pane_current_path}'",
+  "bind -n M-c kill-pane",
+  "source-file ~/.config/omarchy/current/theme/tmux.conf",
+]
