@@ -51,6 +51,7 @@ def test_tmux_template_manages_full_tmux_layer_and_omarchy_theme() -> None:
     template = (ROOT / "tmux.conf.template").read_text(encoding="utf-8")
     assert 'unbind -n "__TMUX_INDEX_KEY__"' in template
     assert 'bind -n "__TMUX_INDEX_KEY__" run-shell "TMUX_CLIENT_TTY=' in template
+    assert '\\"__TM_PUBLIC_LAUNCHER__\\" index >/dev/null 2>&1' in template
     assert "set -g prefix C-Space" in template
     assert "set -g prefix2 M-a" in template
     assert 'bind q run-shell "\\"__TM_PUBLIC_LAUNCHER__\\" reload >/dev/null 2>&1"' in template

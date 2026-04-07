@@ -150,7 +150,7 @@ def test_reload_managed_config_unbinds_tm_managed_keys_and_sources_primary_conf(
     config_dir = home_dir / ".config" / "tmux"
     config_dir.mkdir(parents=True)
     config_path = config_dir / "tmux.conf"
-    config_path.write_text('bind -n "F10" run-shell "TMUX_CLIENT_TTY=\'#{client_tty}\' \\"/tmp/tm\\" >/dev/null 2>&1"\n')
+    config_path.write_text('bind -n "F10" run-shell "TMUX_CLIENT_TTY=\'#{client_tty}\' \\"/tmp/tm\\" index >/dev/null 2>&1"\n')
 
     api = FakeAPI({}, env={"HOME": str(home_dir)})
 

@@ -48,10 +48,10 @@ tm-managed legacy shims such as `~/.tmux.conf`, `~/.tmux/tm.conf`, and
 `~/.config/tmux/tmux.conf` source of truth.
 
 The managed config keeps the index-session shortcut repo-owned instead of
-hand-maintained. That shortcut runs the installed `tm` command, so the managed
-`index` session is recreated first if it is missing. The default shortcut key
-is `M-i`. You can still override it with `--tmux-key <key>` if you want a
-different tmux key name.
+hand-maintained. That shortcut runs `tm index`, so the managed `index` session
+is recreated first if it is missing. The default shortcut key is `M-i`. You
+can still override it with `--tmux-key <key>` if you want a different tmux key
+name.
 
 The managed prefix-`q` reload now runs `tm reload`, which first unbinds the
 tm-managed key set from the live tmux server and then re-sources

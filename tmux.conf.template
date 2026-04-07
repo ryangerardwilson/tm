@@ -25,7 +25,7 @@ unbind -n "M-v"
 unbind -n "M-Home"
 unbind -n "M-End"
 unbind -n "M-DC"
-bind -n "__TMUX_INDEX_KEY__" run-shell "TMUX_CLIENT_TTY='#{client_tty}' \"__TM_PUBLIC_LAUNCHER__\" >/dev/null 2>&1"
+bind -n "__TMUX_INDEX_KEY__" run-shell "TMUX_CLIENT_TTY='#{client_tty}' \"__TM_PUBLIC_LAUNCHER__\" index >/dev/null 2>&1"
 
 # Vi mode for copy
 setw -g mode-keys vi
