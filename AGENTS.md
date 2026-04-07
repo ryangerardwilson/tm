@@ -30,10 +30,12 @@
 - Preserve safe kill semantics by moving attached clients to another session before killing the target.
 - If killing the final non-fallback session requires a temporary session, create it explicitly rather than guessing around tmux internals.
 - Restored non-Codex panes should come back as shells in the saved working directory unless the app has an exact, low-risk resume primitive for that process type.
+- Keep tm narrow. Do not turn it into a general tmux config manager. Omarchy or the user's main tmux config owns pane, window, copy-mode, theme, and status-bar behavior.
+- The tm installer may manage only tm-specific integration points: the launcher binding include under `~/.config/tmux/` and the compatibility shim at `~/.tmux.conf`.
 
 ## Release Contract
 - Keep `tm` aligned with the workspace release contract.
 - `install.sh` installs tagged release bundles into `~/.tm/app`, keeps the internal launcher at `~/.tm/bin/tm`, and publishes the user-facing command at `~/.local/bin/tm`.
-- `install.sh` owns the full `~/.tmux.conf` payload through the repo-managed `tmux.conf.template`; persistent tmux config changes must be made in this repo, not by hand-editing `~/.tmux.conf`.
-- Do not edit `~/.tmux.conf` directly except for short-lived local testing. After testing, move the change into `~/Apps/tm/`, then use the app install or release-upgrade path so the managed file is regenerated from the app.
+- `install.sh` owns the tm-managed include at `~/.config/tmux/tm.conf`, ensures `~/.config/tmux/tmux.conf` sources it, and writes a small compatibility shim at `~/.tmux.conf` so fresh tmux servers and Omarchy reloads converge on the same config path.
+- Do not hand-edit the tm-managed include or the compatibility shim except for short-lived local testing. After testing, move the change into `~/Apps/tm/`, then use the app install or release-upgrade path so the managed files are regenerated from the app.
 - Tagged builds stamp `_version.py` in the release artifact; the checked-in file stays at `0.0.0`.

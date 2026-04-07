@@ -13,8 +13,10 @@ curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/tm/main/install.sh
 ```
 
 The installer keeps app state under `~/.tm`, publishes the user-facing command
-at `~/.local/bin/tm`, and overwrites `~/.tmux.conf` with the repo-managed tmux
-config on every install or upgrade.
+at `~/.local/bin/tm`, writes the tm-managed binding include to
+`~/.config/tmux/tm.conf`, ensures `~/.config/tmux/tmux.conf` sources it, and
+replaces `~/.tmux.conf` with a small compatibility shim that sources
+`~/.config/tmux/tmux.conf`.
 
 If `~/.local/bin` is not already on your `PATH`, add it once to `~/.bashrc`
 and reload your shell:
@@ -38,9 +40,12 @@ Installer shortcuts:
 The installer never edits shell startup files automatically. If `~/.local/bin`
 is already on your `PATH`, no shell change is needed.
 
-`tm` owns the full contents of `~/.tmux.conf`. Persistent tmux config changes
-should be made in the `tm` repo and then installed or upgraded through `tm`,
-not hand-edited in `~/.tmux.conf`.
+`tm` does not own your full tmux config. Omarchy or your main tmux config
+continues to own pane, window, copy-mode, theme, and status-bar behavior.
+`tm` only owns its launcher binding include at `~/.config/tmux/tm.conf` plus
+the compatibility shim at `~/.tmux.conf`. Persistent changes to those
+tm-managed files should be made in the `tm` repo and then installed or
+upgraded through `tm`, not hand-edited in place.
 
 The managed config keeps the index-session shortcut repo-owned instead of
 hand-maintained. That shortcut runs the installed `tm` command, so the managed
@@ -48,10 +53,8 @@ hand-maintained. That shortcut runs the installed `tm` command, so the managed
 is `M-i`. You can still override it with `--tmux-key <key>` if you want a
 different tmux key name.
 
-The managed root tmux bindings include the current pane, window, session,
-copy-mode, and status-bar setup, including `M-h` for left-pane navigation,
-`M-|` for horizontal split, `M-\\` for vertical split, and `M-c` for kill
-pane.
+The managed tmux integration only owns the index-session shortcut binding.
+Everything else stays with Omarchy or your main tmux config.
 
 ## Usage
 

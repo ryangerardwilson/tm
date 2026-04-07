@@ -13,33 +13,8 @@ enabled = true
 default_key = "M-i"
 snippet_name = "tm.conf"
 run_shell_command = "TMUX_CLIENT_TTY='#{client_tty}' \"${PUBLIC_LAUNCHER}\" >/dev/null 2>&1"
-unbind_keys = [
-  "C-i",
-  "Tab",
-  "C-Insert",
-  "Insert",
-  "F8",
-  "F9",
-  "F12",
-  "M-h",
-  "M-|",
-  "M-\\\\",
-  "M-c",
-  "M--",
-  "M-v",
-  "M-Home",
-  "M-End",
-  "M-DC",
-]
+unbind_keys = []
 legacy_lines = [
-  "unbind -n C-Insert",
-  "bind -n C-Insert switch-client -t index",
-  "unbind -n Insert",
-  "bind -n Insert switch-client -t index",
+  "source-file ~/.tmux/tm.conf",
 ]
-extra_bindings = [
-  "bind -n \"M-h\" select-pane -L",
-  "bind -n \"M-|\" split-window -h -c \"#{pane_current_path}\"",
-  "bind -n \"M-\\\\\" split-window -v -c \"#{pane_current_path}\"",
-  "bind -n \"M-c\" kill-pane",
-]
+extra_bindings = []
