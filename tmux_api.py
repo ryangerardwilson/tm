@@ -164,8 +164,16 @@ def _is_tm_browser_process(process: ProcessInfo) -> bool:
 
 
 def _pane_text_shows_working(text: str) -> bool:
-    recent_lines = [line.strip().lower() for line in text.splitlines() if line.strip()][-3:]
-    return any("working (" in line or "esc to interrupt" in line for line in recent_lines)
+    recent_lines = [line.strip().lower() for line in text.splitlines() if line.strip()][-4:]
+    recent_text = " ".join(recent_lines)
+    return any(
+        marker in recent_text
+        for marker in (
+            "working (",
+            "esc to interrupt",
+            "waiting for background terminal",
+        )
+    )
 
 
 def _tmux_server_missing(text: str) -> bool:

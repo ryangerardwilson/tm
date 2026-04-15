@@ -385,6 +385,34 @@ def test_list_session_agent_statuses_counts_working_and_idle_codex_panes() -> No
     assert statuses == {"work": AgentStatus(total=2, working=1, idle=1)}
 
 
+def test_list_session_agent_statuses_treats_background_terminal_wait_as_working() -> None:
+    class AgentAPI(FakeAPI):
+        def _process_snapshot(self) -> dict[int, ProcessInfo]:
+            return {
+                100: ProcessInfo(100, 1, "node-MainThread", "node /home/ryan/.npm-global/bin/codex"),
+                101: ProcessInfo(101, 100, "codex", "/vendor/codex/codex"),
+            }
+
+    api = AgentAPI(
+        {
+            ("list-panes", "-a", "-F", LIST_PANES_FORMAT): FakeProc(
+                stdout="work\t0\t0\t%1\t100\tnode\t/tmp/work\t1\n"
+            ),
+            ("capture-pane", "-p", "-t", "%1", "-S", "-40"): FakeProc(
+                stdout="Waiting for background\nterminal\n"
+            ),
+        }
+    )
+
+    statuses = api.list_session_agent_statuses()
+    assert statuses == {"work": AgentStatus(total=1, working=1, idle=0)}
+
+
+def test_pane_text_shows_working_for_background_terminal_wait_text() -> None:
+    assert tmux_api._pane_text_shows_working("Waiting for background terminal\n") is True
+    assert tmux_api._pane_text_shows_working("Waiting for background\nterminal\n") is True
+
+
 def test_rollout_thread_id_parser_extracts_codex_thread_id() -> None:
     output = (
         "codex 2101 ryan 45w REG 0,55 340110 14346254 "
