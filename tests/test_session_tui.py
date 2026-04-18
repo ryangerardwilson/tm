@@ -11,6 +11,7 @@ from session_tui import (
     _fit_row_segments,
     _format_session_row,
     _handle_normal_key,
+    _help_body_lines,
     _maybe_write_hourly_snapshot,
     _handle_prompt_key,
     _rename_selected_session,
@@ -51,6 +52,25 @@ def test_help_is_hidden_until_toggled() -> None:
     assert state.show_help is False
     _handle_normal_key(state, ord("?"))
     assert state.show_help is True
+
+
+def test_help_body_lines_align_shortcuts_on_wide_width() -> None:
+    lines = _help_body_lines(60)
+    assert lines[0] == "j / k or arrows  move"
+    assert lines[1].startswith("l")
+    assert lines[2].startswith("m")
+    assert lines[1].index("switch") == lines[2].index("mark")
+    assert lines[1].index("switch") == lines[3].index("toggle")
+
+
+def test_help_body_lines_stack_shortcuts_on_narrow_width() -> None:
+    lines = _help_body_lines(20)
+    assert lines[:4] == [
+        "j / k or arrows",
+        "  move",
+        "l",
+        "  switch to curre...",
+    ]
 
 
 def test_j_wraps_from_last_to_first() -> None:

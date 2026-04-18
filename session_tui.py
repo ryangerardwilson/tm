@@ -16,27 +16,20 @@ from tmux_api import (
 )
 
 
-HELP_LINES = [
-    "tm",
-    "",
-    "j / k or arrows",
-    "  move",
-    "l",
-    "  switch to the current session",
-    "m",
-    "  mark or unmark the current session",
-    "v",
-    "  toggle visual mode for a contiguous selection",
-    "x",
-    "  kill the current session, marked sessions, or visual selection",
-    "n",
-    "  create a new named session",
-    ",rn",
-    "  rename the current session",
-    "?",
-    "  toggle this help",
-    "q",
-    "  quit",
+HELP_TITLE = "tm help"
+HELP_FOOTER = "j / k scroll  q / esc / ? close"
+HELP_ENTRY_GAP = 2
+HELP_INLINE_DESC_MIN_WIDTH = 18
+HELP_ITEMS = [
+    ("j / k or arrows", "move"),
+    ("l", "switch to current session"),
+    ("m", "mark or unmark current session"),
+    ("v", "toggle contiguous visual selection"),
+    ("x", "kill current, marked, or visual selection"),
+    ("n", "create new session"),
+    (",rn", "rename current session"),
+    ("?", "toggle help"),
+    ("q", "quit"),
 ]
 
 ANIMATION_TIMEOUT_MS = 60
@@ -216,12 +209,17 @@ def _setup_curses(stdscr: curses.window) -> None:
 def _draw_help(stdscr: curses.window, state: SessionBrowserState) -> None:
     stdscr.erase()
     height, width = stdscr.getmaxyx()
-    stdscr.addnstr(0, 0, "tm", width - 1, curses.A_BOLD)
-    max_visible = max(1, height - 2)
-    start = min(state.help_scroll, max(0, len(HELP_LINES) - max_visible))
-    for row, line in enumerate(HELP_LINES[start : start + max_visible], start=1):
-        stdscr.addnstr(row, 0, line, width - 1)
-    stdscr.addnstr(height - 1, 0, "? close", width - 1)
+    content_width = max(1, width - 1)
+    stdscr.addnstr(0, 0, HELP_TITLE, content_width, curses.A_BOLD)
+
+    body_lines = _help_body_lines(content_width)
+    body_start_row = 2 if height >= 4 else 1
+    max_visible = max(1, height - body_start_row - 1)
+    start = min(state.help_scroll, max(0, len(body_lines) - max_visible))
+    for row, line in enumerate(body_lines[start : start + max_visible], start=body_start_row):
+        stdscr.addnstr(row, 0, line, content_width)
+
+    stdscr.addnstr(height - 1, 0, _truncate_text(HELP_FOOTER, content_width), content_width)
     stdscr.refresh()
 
 
@@ -272,6 +270,26 @@ def _draw_sessions(stdscr: curses.window, state: SessionBrowserState) -> None:
     else:
         stdscr.addnstr(height - 1, 0, state.status_line(), width - 1)
     stdscr.refresh()
+
+
+def _help_body_lines(width: int) -> list[str]:
+    if width <= 0:
+        return []
+
+    key_width = max(len(key) for key, _ in HELP_ITEMS)
+    if width < key_width + HELP_ENTRY_GAP + HELP_INLINE_DESC_MIN_WIDTH:
+        lines: list[str] = []
+        for key, description in HELP_ITEMS:
+            lines.append(_truncate_text(key, width))
+            lines.append(_truncate_text(f"  {description}", width))
+        return lines
+
+    description_width = max(1, width - key_width - HELP_ENTRY_GAP)
+    lines = []
+    for key, description in HELP_ITEMS:
+        padding = " " * (key_width - len(key) + HELP_ENTRY_GAP)
+        lines.append(f"{key}{padding}{_truncate_text(description, description_width)}")
+    return lines
 
 
 def _format_session_row(
